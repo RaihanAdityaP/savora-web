@@ -6,6 +6,13 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
 import { toast } from 'sonner'
+import type { Database } from '@/lib/types/database'
+
+// Type untuk profile check
+type ProfileCheck = Pick<
+  Database['public']['Tables']['profiles']['Row'],
+  'is_banned' | 'banned_reason' | 'banned_at'
+>
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
@@ -60,12 +67,16 @@ export default function LoginPage() {
       }
 
       if (data.user) {
-        // Check if banned
-        const { data: profile } = await supabase
+        // Check if banned with explicit typing
+        const { data: profile, error: profileError } = await supabase
           .from('profiles')
           .select('is_banned, banned_reason, banned_at')
           .eq('id', data.user.id)
-          .single()
+          .single<ProfileCheck>()
+
+        if (profileError) {
+          console.error('Profile check error:', profileError)
+        }
 
         if (profile?.is_banned) {
           await supabase.auth.signOut()
