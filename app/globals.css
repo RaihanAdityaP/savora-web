@@ -1,26 +1,88 @@
-@import "tailwindcss";
+/* stylelint-disable at-rule-no-unknown */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
+@layer base {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --radius: 0.5rem;
+    
+    /* Colors */
+    --background: 245 247 250;
+    --foreground: 38 70 83;
+    --border: 229 231 235;
+  }
+  
+  * {
+    @apply border-gray-200;
+  }
+  
+  body {
+    @apply bg-[#F5F7FA] text-gray-900 antialiased;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+  
+  .gradient-text {
+    @apply bg-gradient-to-r from-[#E76F51] to-[#F4A261] bg-clip-text text-transparent;
+  }
+  
+  .card-gradient {
+    background: linear-gradient(135deg, rgba(231, 111, 81, 0.05), rgba(244, 162, 97, 0.1));
+  }
+  
+  .input-focus {
+    @apply focus:ring-2 focus:ring-[#E76F51]/50 focus:border-[#E76F51];
+  }
+  
+  .bg-primary-gradient {
+    background: linear-gradient(135deg, #264653, #2A9D8F, #E9C46A, #F4A261, #E76F51);
+  }
+  
+  .bg-accent-gradient {
+    background: linear-gradient(135deg, #E76F51, #F4A261);
+  }
+  
+  .bg-admin-gradient {
+    background: linear-gradient(135deg, #FFD700, #FFA500);
+  }
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  @apply bg-gray-100 rounded-lg;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-[#E76F51] rounded-lg hover:bg-[#F4A261];
+}
+
+/* Animations */
+@keyframes shimmer {
+  0% {
+    background-position: -1000px 0;
+  }
+  100% {
+    background-position: 1000px 0;
+  }
+}
+
+.animate-shimmer {
+  animation: shimmer 2s infinite linear;
+  background: linear-gradient(to right, #f6f7f8 0%, #edeef1 20%, #f6f7f8 40%, #f6f7f8 100%);
+  background-size: 1000px 100%;
+}
+
+/* Smooth transitions */
+* {
+  @apply transition-colors duration-200;
 }
