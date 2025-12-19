@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/client'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
+import Image from 'next/image'
 
 interface Recipe {
   id: string
@@ -63,7 +64,6 @@ export default function HomePage() {
   const supabase = createClient()
   
   const [username, setUsername] = useState<string | null>(null)
-  const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [recipes, setRecipes] = useState<Recipe[]>([])
   const [userStats, setUserStats] = useState<UserStats>({
@@ -77,7 +77,9 @@ export default function HomePage() {
     loadUserData()
     loadUserStats()
     loadPopularRecipes()
-    setupBannedListener()
+    const cleanup = setupBannedListener()
+    return cleanup
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const setupBannedListener = () => {
@@ -94,6 +96,7 @@ export default function HomePage() {
             table: 'profiles',
             filter: `id=eq.${user.id}`,
           },
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           (payload: any) => {
             if (payload.new.is_banned) {
               handleBannedUser()
@@ -106,6 +109,8 @@ export default function HomePage() {
         channel.unsubscribe()
       }
     })
+
+    return () => {}
   }
 
   const handleBannedUser = async () => {
@@ -113,8 +118,8 @@ export default function HomePage() {
       await supabase.auth.signOut()
       router.push('/login')
       toast.error('Akun Anda telah dinonaktifkan oleh administrator.')
-    } catch (error) {
-      console.error('Error handling banned user:', error)
+    } catch (err) {
+      console.error('Error handling banned user:', err)
     }
   }
 
@@ -132,11 +137,10 @@ export default function HomePage() {
         
         if (data) {
           setUsername(data.username)
-          setAvatarUrl(data.avatar_url)
         }
       }
-    } catch (error) {
-      console.error('Error loading user data:', error)
+    } catch (err) {
+      console.error('Error loading user data:', err)
     }
   }
 
@@ -156,8 +160,8 @@ export default function HomePage() {
           setUserStats(data)
         }
       }
-    } catch (error) {
-      console.error('Error loading user stats:', error)
+    } catch (err) {
+      console.error('Error loading user stats:', err)
     }
   }
 
@@ -196,8 +200,8 @@ export default function HomePage() {
         }
       }
       setRecipeRatings(ratings)
-    } catch (error) {
-      console.error('Error loading recipes:', error)
+    } catch (err) {
+      console.error('Error loading recipes:', err)
       toast.error('Gagal memuat resep')
     } finally {
       setIsLoading(false)
@@ -341,10 +345,11 @@ function RecipeCard({ recipe, rating }: { recipe: Recipe; rating?: number }) {
       <div className="bg-white rounded-2xl md:rounded-3xl shadow-lg overflow-hidden hover:shadow-2xl transition-all duration-300 border border-gray-100 hover:scale-[1.02] group">
         <div className="relative h-48 md:h-56 lg:h-64 overflow-hidden">
           {recipe.image_url ? (
-            <img
+            <Image
               src={recipe.image_url}
               alt={recipe.title}
-              className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+              fill
+              className="object-cover group-hover:scale-110 transition-transform duration-500"
             />
           ) : (
             <div className="w-full h-full bg-gradient-to-br from-[#E76F51]/20 to-[#F4A261]/20 flex items-center justify-center">
@@ -375,10 +380,12 @@ function RecipeCard({ recipe, rating }: { recipe: Recipe; rating?: number }) {
           <div className="flex items-center justify-between pt-3 border-t border-gray-100">
             <div className="flex items-center gap-2">
               {recipe.profiles?.avatar_url ? (
-                <img
+                <Image
                   src={recipe.profiles.avatar_url}
                   alt={recipe.profiles.username || 'User'}
-                  className="w-7 h-7 md:w-8 md:h-8 rounded-full object-cover ring-2 ring-white shadow-sm"
+                  width={32}
+                  height={32}
+                  className="rounded-full object-cover ring-2 ring-white shadow-sm"
                 />
               ) : (
                 <div className="w-7 h-7 md:w-8 md:h-8 rounded-full bg-gradient-to-br from-[#E76F51] to-[#F4A261] ring-2 ring-white shadow-sm" />

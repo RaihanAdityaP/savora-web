@@ -33,7 +33,7 @@ export default function RegisterPage() {
     setLoading(true)
 
     try {
-      const { data, error } = await supabase.auth.signUp({
+      const { data, error: authError } = await supabase.auth.signUp({
         email: email.trim(),
         password: password,
         options: {
@@ -44,13 +44,13 @@ export default function RegisterPage() {
         },
       })
 
-      if (error) {
-        if (error.message.includes('already registered') || error.message.includes('already exists')) {
+      if (authError) {
+        if (authError.message.includes('already registered') || authError.message.includes('already exists')) {
           toast.error('Email sudah terdaftar. Silakan login atau kirim ulang verifikasi.')
-        } else if (error.message.includes('Password')) {
+        } else if (authError.message.includes('Password')) {
           toast.error('Password minimal 6 karakter')
         } else {
-          toast.error(`Error: ${error.message}`)
+          toast.error(`Error: ${authError.message}`)
         }
         return
       }
@@ -66,8 +66,8 @@ export default function RegisterPage() {
           router.push('/login')
         }, 2000)
       }
-    } catch (error: any) {
-      console.error('Register error:', error)
+    } catch (err) {
+      console.error('Register error:', err)
       toast.error('Terjadi kesalahan. Silakan coba lagi.')
     } finally {
       setLoading(false)

@@ -50,18 +50,18 @@ export default function LoginPage() {
     setLoading(true)
 
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({
+      const { data, error: authError } = await supabase.auth.signInWithPassword({
         email: email.trim(),
         password: password,
       })
 
-      if (error) {
-        if (error.message.includes('Invalid login credentials')) {
+      if (authError) {
+        if (authError.message.includes('Invalid login credentials')) {
           toast.error('Email atau password salah')
-        } else if (error.message.includes('Email not confirmed')) {
+        } else if (authError.message.includes('Email not confirmed')) {
           toast.error('Silakan verifikasi email Anda terlebih dahulu')
         } else {
-          toast.error(`Error: ${error.message}`)
+          toast.error(`Error: ${authError.message}`)
         }
         return
       }
@@ -88,8 +88,8 @@ export default function LoginPage() {
         router.push('/home')
         router.refresh()
       }
-    } catch (error: any) {
-      console.error('Login error:', error)
+    } catch (err) {
+      console.error('Login error:', err)
       toast.error('Terjadi kesalahan. Silakan coba lagi.')
     } finally {
       setLoading(false)
@@ -100,19 +100,19 @@ export default function LoginPage() {
     setGoogleLoading(true)
 
     try {
-      const { error } = await supabase.auth.signInWithOAuth({
+      const { error: authError } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
           redirectTo: `${window.location.origin}/api/auth/callback`,
         },
       })
 
-      if (error) {
+      if (authError) {
         toast.error('Gagal masuk dengan Google')
         setGoogleLoading(false)
       }
-    } catch (error) {
-      console.error('Google sign in error:', error)
+    } catch (err) {
+      console.error('Google sign in error:', err)
       toast.error('Terjadi kesalahan')
       setGoogleLoading(false)
     }
@@ -124,17 +124,18 @@ export default function LoginPage() {
     if (!emailToResend) return
 
     try {
-      const { error } = await supabase.auth.resend({
+      const { error: resendError } = await supabase.auth.resend({
         type: 'signup',
         email: emailToResend.trim(),
       })
 
-      if (error) {
+      if (resendError) {
         toast.error('Gagal mengirim email verifikasi')
       } else {
         toast.success(`Email verifikasi telah dikirim ke ${emailToResend}`)
       }
-    } catch (error) {
+    } catch (err) {
+      console.error('Resend error:', err)
       toast.error('Terjadi kesalahan')
     }
   }

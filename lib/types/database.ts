@@ -19,7 +19,7 @@ export interface Database {
           referred_by: string | null
           total_referrals: number
           referral_points: number
-          social_links: Record<string, any>
+          social_links: Record<string, unknown>
           cooking_level: string
           total_followers: number
           total_following: number
@@ -45,7 +45,7 @@ export interface Database {
           referred_by?: string | null
           total_referrals?: number
           referral_points?: number
-          social_links?: Record<string, any>
+          social_links?: Record<string, unknown>
           cooking_level?: string
           total_followers?: number
           total_following?: number
@@ -71,7 +71,7 @@ export interface Database {
           referred_by?: string | null
           total_referrals?: number
           referral_points?: number
-          social_links?: Record<string, any>
+          social_links?: Record<string, unknown>
           cooking_level?: string
           total_followers?: number
           total_following?: number
@@ -92,8 +92,8 @@ export interface Database {
           servings: number | null
           difficulty: string | null
           calories: number | null
-          ingredients: Record<string, any> | null
-          steps: Record<string, any> | null
+          ingredients: Record<string, unknown> | null
+          steps: Record<string, unknown> | null
           image_url: string | null
           additional_images: string[] | null
           video_url: string | null
@@ -115,8 +115,8 @@ export interface Database {
           servings?: number | null
           difficulty?: string | null
           calories?: number | null
-          ingredients?: Record<string, any> | null
-          steps?: Record<string, any> | null
+          ingredients?: Record<string, unknown> | null
+          steps?: Record<string, unknown> | null
           image_url?: string | null
           additional_images?: string[] | null
           video_url?: string | null
@@ -138,8 +138,8 @@ export interface Database {
           servings?: number | null
           difficulty?: string | null
           calories?: number | null
-          ingredients?: Record<string, any> | null
-          steps?: Record<string, any> | null
+          ingredients?: Record<string, unknown> | null
+          steps?: Record<string, unknown> | null
           image_url?: string | null
           additional_images?: string[] | null
           video_url?: string | null
@@ -385,7 +385,7 @@ export interface Database {
           amount: number
           status: string
           payment_type: string | null
-          midtrans_response: Record<string, any> | null
+          midtrans_response: Record<string, unknown> | null
           created_at: string
           updated_at: string
         }
@@ -396,7 +396,7 @@ export interface Database {
           amount: number
           status?: string
           payment_type?: string | null
-          midtrans_response?: Record<string, any> | null
+          midtrans_response?: Record<string, unknown> | null
           created_at?: string
           updated_at?: string
         }
@@ -407,7 +407,7 @@ export interface Database {
           amount?: number
           status?: string
           payment_type?: string | null
-          midtrans_response?: Record<string, any> | null
+          midtrans_response?: Record<string, unknown> | null
           created_at?: string
           updated_at?: string
         }
@@ -497,7 +497,7 @@ export interface Database {
           action: string
           entity_type: string
           entity_id: string | null
-          details: Record<string, any> | null
+          details: Record<string, unknown> | null
           ip_address: string | null
           user_agent: string | null
           created_at: string
@@ -508,7 +508,7 @@ export interface Database {
           action: string
           entity_type: string
           entity_id?: string | null
-          details?: Record<string, any> | null
+          details?: Record<string, unknown> | null
           ip_address?: string | null
           user_agent?: string | null
           created_at?: string
@@ -519,7 +519,7 @@ export interface Database {
           action?: string
           entity_type?: string
           entity_id?: string | null
-          details?: Record<string, any> | null
+          details?: Record<string, unknown> | null
           ip_address?: string | null
           user_agent?: string | null
           created_at?: string
