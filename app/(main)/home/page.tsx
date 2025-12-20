@@ -2,10 +2,12 @@
 
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
-import Image from 'next/image'
+import CustomAppBar from '@/components/ui/custom-app-bar'
+import CustomBottomNav from '@/components/ui/custom-bottom-nav'
+import RecipeCard from '@/components/ui/recipe-card'
+import { Flame } from 'lucide-react'
 
 interface Recipe {
   id: string
@@ -64,6 +66,7 @@ export default function HomePage() {
   const supabase = createClient()
   
   const [username, setUsername] = useState<string | null>(null)
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [recipes, setRecipes] = useState<Recipe[]>([])
   const [userStats, setUserStats] = useState<UserStats>({
@@ -79,7 +82,6 @@ export default function HomePage() {
     loadPopularRecipes()
     const cleanup = setupBannedListener()
     return cleanup
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const setupBannedListener = () => {
@@ -96,7 +98,6 @@ export default function HomePage() {
             table: 'profiles',
             filter: `id=eq.${user.id}`,
           },
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           (payload: any) => {
             if (payload.new.is_banned) {
               handleBannedUser()
@@ -131,12 +132,13 @@ export default function HomePage() {
           .from('profiles')
           .select('username, avatar_url')
           .eq('id', user.id)
-          .single<Pick<ProfileData, 'username' | 'avatar_url'>>()
+          .single<{ username: string | null; avatar_url: string | null }>()
 
         if (error) throw error
         
         if (data) {
           setUsername(data.username)
+          setAvatarUrl(data.avatar_url)
         }
       }
     } catch (err) {
@@ -192,11 +194,11 @@ export default function HomePage() {
           .from('recipe_ratings')
           .select('rating')
           .eq('recipe_id', recipe.id)
+          .returns<{ rating: number | null }[]>()
 
         if (ratingData && ratingData.length > 0) {
-          const typedRatings = ratingData as RatingData[]
-          const total = typedRatings.reduce((sum: number, r: RatingData) => sum + r.rating, 0)
-          ratings[recipe.id] = total / typedRatings.length
+          const total = ratingData.reduce((sum, r) => sum + (r.rating || 0), 0)
+          ratings[recipe.id] = total / ratingData.length
         }
       }
       setRecipeRatings(ratings)
@@ -223,7 +225,7 @@ export default function HomePage() {
     return (
       <div className="min-h-screen flex items-center justify-center bg-white">
         <div className="text-center space-y-4">
-          <div className="w-20 h-20 mx-auto rounded-full bg-gradient-to-br from-[#E76F51] to-[#F4A261] flex items-center justify-center shadow-xl">
+          <div className="w-20 h-20 mx-auto rounded-full bg-gradient-to-br from-[#E76F51] to-[#F4A261] flex items-center justify-center shadow-xl animate-pulse">
             <div className="w-16 h-16 border-4 border-white border-t-transparent rounded-full animate-spin" />
           </div>
           <p className="text-gray-600 font-medium">Memuat resep lezat...</p>
@@ -234,6 +236,8 @@ export default function HomePage() {
 
   return (
     <div className="min-h-screen bg-[#F5F7FA]">
+      <CustomAppBar />
+      
       <div className="max-w-7xl mx-auto pb-24 md:pb-8">
         {/* Welcome Card */}
         <div className="p-4 md:p-6 lg:p-8 animate-fade-in">
@@ -298,7 +302,7 @@ export default function HomePage() {
             </div>
             <div className="px-3 md:px-4 py-2 bg-gradient-to-r from-[#E76F51]/10 to-[#F4A261]/10 rounded-full border-2 border-[#E76F51]/30">
               <div className="flex items-center gap-1.5">
-                <span className="text-[#E76F51] text-base md:text-lg">🔥</span>
+                <Flame className="w-4 h-4 md:w-5 md:h-5 text-[#E76F51]" />
                 <span className="text-[#E76F51] text-sm md:text-base font-bold">
                   {recipes.length}
                 </span>
@@ -309,18 +313,24 @@ export default function HomePage() {
           {recipes.length === 0 ? (
             <EmptyState />
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-5 lg:gap-6">
+            <div className="space-y-0">
               {recipes.map((recipe) => (
                 <RecipeCard
                   key={recipe.id}
                   recipe={recipe}
                   rating={recipeRatings[recipe.id]}
+                  onTap={() => {
+                    loadUserStats()
+                    loadPopularRecipes()
+                  }}
                 />
               ))}
             </div>
           )}
         </div>
       </div>
+
+      <CustomBottomNav avatarUrl={avatarUrl} />
     </div>
   )
 }
@@ -339,83 +349,6 @@ function StatCard({ icon, value, label }: { icon: string; value: number; label: 
   )
 }
 
-function RecipeCard({ recipe, rating }: { recipe: Recipe; rating?: number }) {
-  return (
-    <Link href={`/recipe/${recipe.id}`}>
-      <div className="bg-white rounded-2xl md:rounded-3xl shadow-lg overflow-hidden hover:shadow-2xl transition-all duration-300 border border-gray-100 hover:scale-[1.02] group">
-        <div className="relative h-48 md:h-56 lg:h-64 overflow-hidden">
-          {recipe.image_url ? (
-            <Image
-              src={recipe.image_url}
-              alt={recipe.title}
-              fill
-              className="object-cover group-hover:scale-110 transition-transform duration-500"
-            />
-          ) : (
-            <div className="w-full h-full bg-gradient-to-br from-[#E76F51]/20 to-[#F4A261]/20 flex items-center justify-center">
-              <span className="text-6xl md:text-7xl">🍳</span>
-            </div>
-          )}
-          {recipe.difficulty && (
-            <div className="absolute top-3 right-3 px-3 py-1.5 bg-white/95 backdrop-blur-sm rounded-full text-xs md:text-sm font-bold text-gray-800 shadow-lg border-2 border-white/50">
-              {recipe.difficulty}
-            </div>
-          )}
-          
-          {/* Gradient overlay */}
-          <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-        </div>
-
-        <div className="p-4 md:p-5">
-          <h3 className="font-bold text-base md:text-lg lg:text-xl text-gray-900 mb-2 line-clamp-2 group-hover:text-[#E76F51] transition-colors">
-            {recipe.title}
-          </h3>
-          
-          {recipe.description && (
-            <p className="text-gray-600 text-sm md:text-base mb-4 line-clamp-2 leading-relaxed">
-              {recipe.description}
-            </p>
-          )}
-
-          <div className="flex items-center justify-between pt-3 border-t border-gray-100">
-            <div className="flex items-center gap-2">
-              {recipe.profiles?.avatar_url ? (
-                <Image
-                  src={recipe.profiles.avatar_url}
-                  alt={recipe.profiles.username || 'User'}
-                  width={32}
-                  height={32}
-                  className="rounded-full object-cover ring-2 ring-white shadow-sm"
-                />
-              ) : (
-                <div className="w-7 h-7 md:w-8 md:h-8 rounded-full bg-gradient-to-br from-[#E76F51] to-[#F4A261] ring-2 ring-white shadow-sm" />
-              )}
-              <span className="text-xs md:text-sm text-gray-700 font-semibold">
-                {recipe.profiles?.username || 'Anonymous'}
-              </span>
-            </div>
-
-            <div className="flex items-center gap-3 text-xs md:text-sm text-gray-600">
-              {rating && (
-                <div className="flex items-center gap-1 bg-yellow-50 px-2 py-1 rounded-full">
-                  <span className="text-yellow-500 text-sm">⭐</span>
-                  <span className="font-bold text-gray-900">{rating.toFixed(1)}</span>
-                </div>
-              )}
-              {recipe.cooking_time && (
-                <div className="flex items-center gap-1 bg-blue-50 px-2 py-1 rounded-full">
-                  <span className="text-sm">⏱️</span>
-                  <span className="font-semibold text-gray-900">{recipe.cooking_time}m</span>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
-    </Link>
-  )
-}
-
 function EmptyState() {
   return (
     <div className="text-center py-16 md:py-24 px-8">
@@ -428,13 +361,13 @@ function EmptyState() {
       <p className="text-gray-600 text-base md:text-lg mb-10 max-w-md mx-auto leading-relaxed">
         Jadilah yang pertama membagikan resep lezat dan inspirasi kuliner!
       </p>
-      <Link
+      <a
         href="/create"
         className="inline-flex items-center gap-3 px-8 md:px-10 py-4 md:py-5 bg-gradient-to-r from-[#E76F51] to-[#F4A261] text-white rounded-2xl font-bold shadow-xl hover:shadow-2xl transition-all hover:scale-105"
       >
         <span className="text-xl md:text-2xl">➕</span>
         <span className="text-base md:text-lg">Buat Resep Pertama</span>
-      </Link>
+      </a>
     </div>
   )
 }
