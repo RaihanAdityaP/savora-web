@@ -1,13 +1,13 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { use, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import Image from 'next/image'
 import { toast } from 'sonner'
 import { 
   Clock, Star, User, Flame, Share2, Bookmark, 
-  BookmarkCheck, Edit, Trash2, ChefHat, Play, Tag
+  BookmarkCheck, Edit, Trash2, ChefHat, Tag, Play, X
 } from 'lucide-react'
 
 interface Recipe {
@@ -41,20 +41,25 @@ interface Recipe {
   }>
 }
 
-// Fixed: ubah user_id jadi nullable
 interface Comment {
   id: string
   content: string
   created_at: string
-  user_id: string | null  // ← Changed from string to string | null
-  recipe_id: string | null  // Added for consistency
+  user_id: string | null
+  recipe_id: string | null
   profiles: {
     username: string | null
     avatar_url: string | null
   } | null
 }
 
-export default function RecipeDetailPage({ params }: { params: { id: string } }) {
+interface PageProps {
+  params: Promise<{ id: string }>
+}
+
+export default function RecipeDetailPage({ params }: PageProps) {
+  const { id: recipeId } = use(params)
+  
   const router = useRouter()
   const supabase = createClient()
   const [recipe, setRecipe] = useState<Recipe | null>(null)
@@ -67,17 +72,25 @@ export default function RecipeDetailPage({ params }: { params: { id: string } })
   const [ratingCount, setRatingCount] = useState(0)
   const [comments, setComments] = useState<Comment[]>([])
   const [commentText, setCommentText] = useState('')
+  const [editingCommentId, setEditingCommentId] = useState<string | null>(null)
+  const [editingCommentText, setEditingCommentText] = useState('')
+  const [userCollections, setUserCollections] = useState<any[]>([])
+  const [showCollectionsModal, setShowCollectionsModal] = useState(false)
+  const [savedCollections, setSavedCollections] = useState<string[]>([])
 
   useEffect(() => {
+    console.log('Recipe ID:', recipeId)
     loadRecipe()
     checkFavorite()
     loadRating()
     loadComments()
     incrementViews()
-  }, [params.id])
+    loadUserCollections()
+  }, [recipeId])
 
   const loadRecipe = async () => {
     try {
+      console.log('Loading recipe...')
       const { data: { user } } = await supabase.auth.getUser()
       setCurrentUserId(user?.id || null)
 
@@ -90,16 +103,20 @@ export default function RecipeDetailPage({ params }: { params: { id: string } })
         setCurrentUserRole(profile?.role || 'user')
       }
 
+      // ✅ FIX: Gunakan kolom user_id langsung tanpa foreign key name
       const { data, error } = await supabase
         .from('recipes')
         .select(`
           *,
-          profiles!recipes_user_id_fkey(username, avatar_url, role, is_premium),
+          profiles:user_id(username, avatar_url, role, is_premium),
           categories(name),
           recipe_tags(tags(id, name))
         `)
-        .eq('id', params.id)
+        .eq('id', recipeId)
         .single()
+
+      console.log('Recipe data:', data)
+      console.log('Recipe error:', error)
 
       if (error) throw error
       setRecipe(data as Recipe)
@@ -116,14 +133,14 @@ export default function RecipeDetailPage({ params }: { params: { id: string } })
       const { data: current } = await supabase
         .from('recipes')
         .select('views_count')
-        .eq('id', params.id)
+        .eq('id', recipeId)
         .single()
 
       if (current) {
         await supabase
           .from('recipes')
           .update({ views_count: (current.views_count || 0) + 1 })
-          .eq('id', params.id)
+          .eq('id', recipeId)
       }
     } catch (err) {
       console.error('Error incrementing views:', err)
@@ -138,7 +155,7 @@ export default function RecipeDetailPage({ params }: { params: { id: string } })
       const { data } = await supabase
         .from('board_recipes')
         .select('id, recipe_boards!inner(user_id)')
-        .eq('recipe_id', params.id)
+        .eq('recipe_id', recipeId)
         .eq('recipe_boards.user_id', user.id)
         .maybeSingle()
 
@@ -155,7 +172,7 @@ export default function RecipeDetailPage({ params }: { params: { id: string } })
       const { data: ratings } = await supabase
         .from('recipe_ratings')
         .select('rating, user_id')
-        .eq('recipe_id', params.id)
+        .eq('recipe_id', recipeId)
 
       if (ratings && ratings.length > 0) {
         const total = ratings.reduce((sum, r) => sum + (r.rating || 0), 0)
@@ -174,16 +191,110 @@ export default function RecipeDetailPage({ params }: { params: { id: string } })
 
   const loadComments = async () => {
     try {
+      // ✅ FIX: Gunakan kolom user_id langsung
       const { data } = await supabase
         .from('comments')
-        .select('*, profiles!comments_user_id_fkey(username, avatar_url)')
-        .eq('recipe_id', params.id)
+        .select('*, profiles:user_id(username, avatar_url)')
+        .eq('recipe_id', recipeId)
         .order('created_at', { ascending: false })
 
-      // Now types match perfectly!
+      console.log('Comments loaded:', data)
       setComments(data || [])
     } catch (err) {
       console.error('Error loading comments:', err)
+    }
+  }
+
+  const loadUserCollections = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+
+      // Load user's collections
+      const { data: collections } = await supabase
+        .from('recipe_boards')
+        .select('id, name')
+        .eq('user_id', user.id)
+        .order('name')
+
+      setUserCollections(collections || [])
+
+      // Check which collections already have this recipe
+      const { data: existing } = await supabase
+        .from('board_recipes')
+        .select('board_id')
+        .eq('recipe_id', recipeId)
+
+      if (existing) {
+        setSavedCollections(existing.map(item => item.board_id))
+      }
+    } catch (err) {
+      console.error('Error loading collections:', err)
+    }
+  }
+
+  const handleToggleCollection = async (collectionId: string) => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) {
+        toast.error('Silakan login untuk menyimpan resep')
+        return
+      }
+
+      const isAlreadySaved = savedCollections.includes(collectionId)
+
+      if (isAlreadySaved) {
+        // Remove from collection
+        await supabase
+          .from('board_recipes')
+          .delete()
+          .eq('board_id', collectionId)
+          .eq('recipe_id', recipeId)
+
+        setSavedCollections(prev => prev.filter(id => id !== collectionId))
+        toast.success('Resep dihapus dari koleksi')
+      } else {
+        // Add to collection
+        await supabase
+          .from('board_recipes')
+          .insert({
+            board_id: collectionId,
+            recipe_id: recipeId
+          })
+
+        setSavedCollections(prev => [...prev, collectionId])
+        toast.success('Resep ditambahkan ke koleksi!')
+      }
+    } catch (err) {
+      console.error('Error toggling collection:', err)
+      toast.error('Gagal menyimpan resep')
+    }
+  }
+
+  const handleCreateNewCollection = async () => {
+    const name = prompt('Nama koleksi baru:')
+    if (!name?.trim()) return
+
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+
+      const { data: newCollection } = await supabase
+        .from('recipe_boards')
+        .insert({
+          user_id: user.id,
+          name: name.trim()
+        })
+        .select('id, name')
+        .single()
+
+      if (newCollection) {
+        setUserCollections(prev => [...prev, newCollection])
+        toast.success('Koleksi berhasil dibuat!')
+      }
+    } catch (err) {
+      console.error('Error creating collection:', err)
+      toast.error('Gagal membuat koleksi')
     }
   }
 
@@ -199,7 +310,7 @@ export default function RecipeDetailPage({ params }: { params: { id: string } })
         .from('recipe_ratings')
         .select('id')
         .eq('user_id', user.id)
-        .eq('recipe_id', params.id)
+        .eq('recipe_id', recipeId)
         .maybeSingle()
 
       if (existing) {
@@ -210,7 +321,7 @@ export default function RecipeDetailPage({ params }: { params: { id: string } })
       } else {
         await supabase
           .from('recipe_ratings')
-          .insert({ recipe_id: params.id, user_id: user.id, rating })
+          .insert({ recipe_id: recipeId, user_id: user.id, rating })
       }
 
       setUserRating(rating)
@@ -235,7 +346,7 @@ export default function RecipeDetailPage({ params }: { params: { id: string } })
       await supabase
         .from('comments')
         .insert({
-          recipe_id: params.id,
+          recipe_id: recipeId,
           user_id: user.id,
           content: commentText.trim()
         })
@@ -249,11 +360,53 @@ export default function RecipeDetailPage({ params }: { params: { id: string } })
     }
   }
 
+  const handleEditComment = async (commentId: string) => {
+    if (!editingCommentText.trim()) return
+
+    try {
+      await supabase
+        .from('comments')
+        .update({ content: editingCommentText.trim() })
+        .eq('id', commentId)
+
+      setEditingCommentId(null)
+      setEditingCommentText('')
+      await loadComments()
+      toast.success('Komentar berhasil diperbarui!')
+    } catch (err) {
+      console.error('Error updating comment:', err)
+      toast.error('Gagal memperbarui komentar')
+    }
+  }
+
+  const handleDeleteComment = async (commentId: string) => {
+    if (!confirm('Apakah Anda yakin ingin menghapus komentar ini?')) return
+
+    try {
+      await supabase.from('comments').delete().eq('id', commentId)
+      await loadComments()
+      toast.success('Komentar berhasil dihapus!')
+    } catch (err) {
+      console.error('Error deleting comment:', err)
+      toast.error('Gagal menghapus komentar')
+    }
+  }
+
+  const startEditComment = (comment: Comment) => {
+    setEditingCommentId(comment.id)
+    setEditingCommentText(comment.content)
+  }
+
+  const cancelEditComment = () => {
+    setEditingCommentId(null)
+    setEditingCommentText('')
+  }
+
   const handleDelete = async () => {
     if (!confirm('Apakah Anda yakin ingin menghapus resep ini?')) return
 
     try {
-      await supabase.from('recipes').delete().eq('id', params.id)
+      await supabase.from('recipes').delete().eq('id', recipeId)
       toast.success('Resep berhasil dihapus!')
       router.push('/home')
     } catch (err) {
@@ -263,8 +416,9 @@ export default function RecipeDetailPage({ params }: { params: { id: string } })
   }
 
   const handleShare = async () => {
-    const url = `${window.location.origin}/recipe/${params.id}`
+    const url = `${window.location.origin}/recipe/${recipeId}`
     
+    // Check if Web Share API is available
     if (navigator.share) {
       try {
         await navigator.share({
@@ -272,12 +426,34 @@ export default function RecipeDetailPage({ params }: { params: { id: string } })
           text: recipe?.description || 'Lihat resep ini di Savora!',
           url
         })
+        return
       } catch (err) {
-        console.error('Error sharing:', err)
+        // User cancelled or error occurred, fall through to clipboard
+        console.log('Share cancelled or failed:', err)
       }
-    } else {
-      await navigator.clipboard.writeText(url)
-      toast.success('Link berhasil disalin!')
+    }
+    
+    // Fallback: Copy to clipboard
+    try {
+      // Check if clipboard API is available
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(url)
+        toast.success('Link berhasil disalin!')
+      } else {
+        // Ultimate fallback: create temporary input
+        const tempInput = document.createElement('input')
+        tempInput.value = url
+        tempInput.style.position = 'fixed'
+        tempInput.style.opacity = '0'
+        document.body.appendChild(tempInput)
+        tempInput.select()
+        document.execCommand('copy')
+        document.body.removeChild(tempInput)
+        toast.success('Link berhasil disalin!')
+      }
+    } catch (err) {
+      console.error('Error copying to clipboard:', err)
+      toast.error('Gagal menyalin link. Silakan copy manual: ' + url)
     }
   }
 
@@ -310,53 +486,60 @@ export default function RecipeDetailPage({ params }: { params: { id: string } })
 
   return (
     <div className="min-h-screen bg-[#F5F7FA] pb-20">
-      {/* Hero Image */}
-      <div className="relative w-full h-[400px] bg-gray-200">
-        {recipe.image_url ? (
-          <Image
-            src={recipe.image_url}
-            alt={recipe.title}
-            fill
-            className="object-cover"
-            priority
-          />
-        ) : (
-          <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-[#E76F51] to-[#F4A261]">
-            <ChefHat className="w-24 h-24 text-white" />
-          </div>
-        )}
-        
-        {/* Overlay Actions */}
-        <div className="absolute top-4 left-4 right-4 flex justify-between">
-          <button
-            onClick={() => router.back()}
-            className="w-10 h-10 rounded-full bg-white shadow-lg flex items-center justify-center hover:bg-gray-50"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-            </svg>
-          </button>
-
-          <div className="flex gap-2">
-            <button
-              onClick={handleShare}
-              className="w-10 h-10 rounded-full bg-white shadow-lg flex items-center justify-center hover:bg-gray-50"
-            >
-              <Share2 className="w-5 h-5" />
-            </button>
-            
-            {isFavorite ? (
-              <BookmarkCheck className="w-10 h-10 p-2 rounded-full bg-[#E76F51] text-white shadow-lg" />
-            ) : (
-              <Bookmark className="w-10 h-10 p-2 rounded-full bg-white shadow-lg" />
-            )}
-          </div>
-        </div>
+      {/* Back Button */}
+      <div className="max-w-4xl mx-auto px-4 pt-4">
+        <button
+          onClick={() => router.back()}
+          className="w-10 h-10 rounded-full bg-white shadow-lg flex items-center justify-center hover:bg-gray-50"
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+          </svg>
+        </button>
       </div>
 
-      <div className="max-w-4xl mx-auto px-4 -mt-8">
+      <div className="max-w-4xl mx-auto px-4 py-6">
         {/* Main Card */}
         <div className="bg-white rounded-3xl shadow-xl p-6 md:p-8 mb-6">
+          {/* Hero Image */}
+          <div className="relative w-full h-[300px] md:h-[400px] bg-gray-200 rounded-2xl overflow-hidden mb-6">
+            {recipe.image_url ? (
+              <Image
+                src={recipe.image_url}
+                alt={recipe.title}
+                fill
+                className="object-cover object-center"
+                priority
+                sizes="(max-width: 768px) 100vw, 896px"
+              />
+            ) : (
+              <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-[#E76F51] to-[#F4A261]">
+                <ChefHat className="w-24 h-24 text-white" />
+              </div>
+            )}
+            
+            {/* Overlay Actions */}
+            <div className="absolute top-4 right-4 flex gap-2">
+              <button
+                onClick={handleShare}
+                className="w-10 h-10 rounded-full bg-white shadow-lg flex items-center justify-center hover:bg-gray-50 transition"
+              >
+                <Share2 className="w-5 h-5" />
+              </button>
+              
+              <button
+                onClick={() => setShowCollectionsModal(true)}
+                className="w-10 h-10 rounded-full bg-white shadow-lg flex items-center justify-center hover:bg-gray-50 transition"
+              >
+                {savedCollections.length > 0 ? (
+                  <BookmarkCheck className="w-5 h-5 text-[#E76F51]" />
+                ) : (
+                  <Bookmark className="w-5 h-5" />
+                )}
+              </button>
+            </div>
+          </div>
+
           {/* Title */}
           <h1 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">
             {recipe.title}
@@ -448,13 +631,22 @@ export default function RecipeDetailPage({ params }: { params: { id: string } })
           {/* Video */}
           {recipe.video_url && (
             <div className="mb-6">
-              <h2 className="text-xl font-bold text-gray-900 mb-3">Video Tutorial</h2>
-              <div className="relative w-full aspect-video rounded-2xl overflow-hidden bg-black">
+              <h2 className="text-xl font-bold text-gray-900 mb-3 flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-gradient-to-r from-[#E76F51] to-[#F4A261] flex items-center justify-center">
+                  <Play className="w-4 h-4 text-white fill-white" />
+                </div>
+                Video Tutorial
+              </h2>
+              <div className="relative w-full aspect-video rounded-2xl overflow-hidden bg-black shadow-lg">
                 <video
                   src={recipe.video_url}
                   controls
-                  className="w-full h-full"
-                />
+                  controlsList="nodownload"
+                  className="w-full h-full object-contain"
+                  preload="metadata"
+                >
+                  Browser Anda tidak mendukung video.
+                </video>
               </div>
             </div>
           )}
@@ -463,7 +655,7 @@ export default function RecipeDetailPage({ params }: { params: { id: string } })
           {canEdit && (
             <div className="flex gap-3 mb-6">
               <button
-                onClick={() => router.push(`/recipe/${params.id}/edit`)}
+                onClick={() => router.push(`/recipe/${recipeId}/edit`)}
                 className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 transition"
               >
                 <Edit className="w-5 h-5" />
@@ -484,14 +676,18 @@ export default function RecipeDetailPage({ params }: { params: { id: string } })
         <div className="bg-white rounded-3xl shadow-xl p-6 md:p-8 mb-6">
           <h2 className="text-2xl font-bold text-gray-900 mb-4">Bahan-bahan</h2>
           <div className="space-y-3">
-            {recipe.ingredients.map((ingredient, idx) => (
-              <div key={idx} className="flex items-start gap-3">
-                <div className="w-6 h-6 rounded-full bg-gradient-to-r from-[#E76F51] to-[#F4A261] flex items-center justify-center text-white text-xs font-bold flex-shrink-0 mt-0.5">
-                  {idx + 1}
+            {recipe.ingredients && recipe.ingredients.length > 0 ? (
+              recipe.ingredients.map((ingredient, idx) => (
+                <div key={idx} className="flex items-start gap-3">
+                  <div className="w-6 h-6 rounded-full bg-gradient-to-r from-[#E76F51] to-[#F4A261] flex items-center justify-center text-white text-xs font-bold flex-shrink-0 mt-0.5">
+                    {idx + 1}
+                  </div>
+                  <p className="text-gray-700 leading-relaxed flex-1">{ingredient}</p>
                 </div>
-                <p className="text-gray-700 leading-relaxed flex-1">{ingredient}</p>
-              </div>
-            ))}
+              ))
+            ) : (
+              <p className="text-gray-500 text-center py-4">Tidak ada bahan yang tercatat</p>
+            )}
           </div>
         </div>
 
@@ -499,14 +695,18 @@ export default function RecipeDetailPage({ params }: { params: { id: string } })
         <div className="bg-white rounded-3xl shadow-xl p-6 md:p-8 mb-6">
           <h2 className="text-2xl font-bold text-gray-900 mb-4">Langkah-langkah</h2>
           <div className="space-y-4">
-            {recipe.steps.map((step, idx) => (
-              <div key={idx} className="flex gap-4">
-                <div className="w-8 h-8 rounded-lg bg-gradient-to-r from-[#E76F51] to-[#F4A261] flex items-center justify-center text-white font-bold flex-shrink-0">
-                  {idx + 1}
+            {recipe.steps && recipe.steps.length > 0 ? (
+              recipe.steps.map((step, idx) => (
+                <div key={idx} className="flex gap-4">
+                  <div className="w-8 h-8 rounded-lg bg-gradient-to-r from-[#E76F51] to-[#F4A261] flex items-center justify-center text-white font-bold flex-shrink-0">
+                    {idx + 1}
+                  </div>
+                  <p className="text-gray-700 leading-relaxed flex-1 pt-1">{step}</p>
                 </div>
-                <p className="text-gray-700 leading-relaxed flex-1 pt-1">{step}</p>
-              </div>
-            ))}
+              ))
+            ) : (
+              <p className="text-gray-500 text-center py-4">Tidak ada langkah yang tercatat</p>
+            )}
           </div>
         </div>
 
@@ -570,39 +770,194 @@ export default function RecipeDetailPage({ params }: { params: { id: string } })
 
           {/* Comments List */}
           <div className="space-y-4">
-            {comments.map(comment => (
-              <div key={comment.id} className="p-4 bg-gray-50 rounded-xl">
-                <div className="flex items-center gap-3 mb-2">
-                  <div className="w-8 h-8 rounded-full overflow-hidden bg-gray-200">
-                    {comment.profiles?.avatar_url ? (
-                      <Image
-                        src={comment.profiles.avatar_url}
-                        alt={comment.profiles.username || 'User'}
-                        width={32}
-                        height={32}
-                        className="object-cover"
-                      />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center">
-                        <User className="w-4 h-4 text-gray-400" />
+            {comments.length === 0 ? (
+              <p className="text-gray-500 text-center py-8">Belum ada komentar. Jadilah yang pertama!</p>
+            ) : (
+              comments.map(comment => {
+                const canEdit = currentUserId === comment.user_id
+                const canDelete = canEdit || currentUserRole === 'admin'
+                const isEditing = editingCommentId === comment.id
+
+                return (
+                  <div key={comment.id} className="p-4 bg-gray-50 rounded-xl">
+                    <div className="flex items-start gap-3 mb-2">
+                      <div className="w-8 h-8 rounded-full overflow-hidden bg-gray-200 flex-shrink-0">
+                        {comment.profiles?.avatar_url ? (
+                          <Image
+                            src={comment.profiles.avatar_url}
+                            alt={comment.profiles.username || 'User'}
+                            width={32}
+                            height={32}
+                            className="object-cover"
+                          />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center">
+                            <User className="w-4 h-4 text-gray-400" />
+                          </div>
+                        )}
                       </div>
-                    )}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between mb-1">
+                          <div>
+                            <p className="font-semibold text-sm text-gray-900">
+                              {comment.profiles?.username || 'Anonymous'}
+                            </p>
+                            <p className="text-xs text-gray-500">
+                              {new Date(comment.created_at).toLocaleDateString('id-ID')}
+                            </p>
+                          </div>
+                          {(canEdit || canDelete) && !isEditing && (
+                            <div className="flex gap-1">
+                              {canEdit && (
+                                <button
+                                  onClick={() => startEditComment(comment)}
+                                  className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition"
+                                  title="Edit"
+                                >
+                                  <Edit className="w-4 h-4" />
+                                </button>
+                              )}
+                              {canDelete && (
+                                <button
+                                  onClick={() => handleDeleteComment(comment.id)}
+                                  className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition"
+                                  title="Hapus"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                        
+                        {isEditing ? (
+                          <div className="space-y-2">
+                            <textarea
+                              value={editingCommentText}
+                              onChange={e => setEditingCommentText(e.target.value)}
+                              className="w-full px-3 py-2 border-2 border-gray-200 rounded-lg focus:border-[#E76F51] focus:outline-none resize-none text-sm"
+                              rows={2}
+                            />
+                            <div className="flex gap-2">
+                              <button
+                                onClick={() => handleEditComment(comment.id)}
+                                className="px-3 py-1.5 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition"
+                              >
+                                Simpan
+                              </button>
+                              <button
+                                onClick={cancelEditComment}
+                                className="px-3 py-1.5 bg-gray-200 text-gray-700 text-sm rounded-lg hover:bg-gray-300 transition"
+                              >
+                                Batal
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <p className="text-gray-700 text-sm leading-relaxed break-words">
+                            {comment.content}
+                          </p>
+                        )}
+                      </div>
+                    </div>
                   </div>
-                  <div>
-                    <p className="font-semibold text-sm text-gray-900">
-                      {comment.profiles?.username || 'Anonymous'}
-                    </p>
-                    <p className="text-xs text-gray-500">
-                      {new Date(comment.created_at).toLocaleDateString('id-ID')}
-                    </p>
-                  </div>
-                </div>
-                <p className="text-gray-700 text-sm leading-relaxed">{comment.content}</p>
-              </div>
-            ))}
+                )
+              })
+            )}
           </div>
         </div>
       </div>
+
+      {/* Collections Modal */}
+      {showCollectionsModal && (
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+          onClick={() => setShowCollectionsModal(false)}
+        >
+          <div 
+            className="bg-white rounded-3xl shadow-2xl max-w-md w-full max-h-[80vh] overflow-hidden"
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="bg-gradient-to-r from-[#E76F51] to-[#F4A261] text-white p-6">
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-2xl font-bold">Simpan ke Koleksi</h3>
+                <button
+                  onClick={() => setShowCollectionsModal(false)}
+                  className="w-8 h-8 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center transition"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              <p className="text-white/90 text-sm">Pilih koleksi untuk menyimpan resep ini</p>
+            </div>
+
+            {/* Collections List */}
+            <div className="p-6 overflow-y-auto max-h-96">
+              {userCollections.length === 0 ? (
+                <div className="text-center py-8">
+                  <Bookmark className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                  <p className="text-gray-600 mb-4">Belum ada koleksi</p>
+                  <button
+                    onClick={handleCreateNewCollection}
+                    className="px-6 py-2 bg-gradient-to-r from-[#E76F51] to-[#F4A261] text-white rounded-xl font-semibold hover:opacity-90 transition"
+                  >
+                    Buat Koleksi Pertama
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {userCollections.map(collection => {
+                    const isSaved = savedCollections.includes(collection.id)
+                    return (
+                      <button
+                        key={collection.id}
+                        onClick={() => handleToggleCollection(collection.id)}
+                        className={`w-full flex items-center justify-between p-4 rounded-xl border-2 transition ${
+                          isSaved
+                            ? 'border-[#E76F51] bg-[#E76F51]/10'
+                            : 'border-gray-200 hover:border-[#E76F51]/50'
+                        }`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+                            isSaved ? 'bg-[#E76F51] text-white' : 'bg-gray-100 text-gray-400'
+                          }`}>
+                            <Bookmark className="w-5 h-5" />
+                          </div>
+                          <span className={`font-semibold ${isSaved ? 'text-[#E76F51]' : 'text-gray-700'}`}>
+                            {collection.name}
+                          </span>
+                        </div>
+                        {isSaved && (
+                          <BookmarkCheck className="w-6 h-6 text-[#E76F51]" />
+                        )}
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
+
+              {/* Create New Collection Button */}
+              {userCollections.length > 0 && (
+                <button
+                  onClick={handleCreateNewCollection}
+                  className="w-full mt-4 flex items-center justify-center gap-2 px-4 py-3 border-2 border-dashed border-gray-300 rounded-xl hover:border-[#E76F51] hover:bg-[#E76F51]/5 transition group"
+                >
+                  <div className="w-8 h-8 rounded-full bg-gray-100 group-hover:bg-[#E76F51]/10 flex items-center justify-center transition">
+                    <svg className="w-5 h-5 text-gray-400 group-hover:text-[#E76F51]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                    </svg>
+                  </div>
+                  <span className="font-semibold text-gray-600 group-hover:text-[#E76F51]">
+                    Buat Koleksi Baru
+                  </span>
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

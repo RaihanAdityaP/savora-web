@@ -8,7 +8,7 @@ interface Message {
   content: string
 }
 
-export default function ChatbotLayout({ children }: { children: React.ReactNode }) {
+export default function RecipeLayout({ children }: { children: React.ReactNode }) {
   const [isOpen, setIsOpen] = useState(false)
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
@@ -41,37 +41,42 @@ export default function ChatbotLayout({ children }: { children: React.ReactNode 
     setLoading(true)
 
     try {
-      const response = await fetch('https://api.anthropic.com/v1/messages', {
+      const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
         method: 'POST',
         headers: {
+          'Authorization': 'Bearer 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',
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          model: 'claude-sonnet-4-20250514',
-          max_tokens: 1000,
+          model: 'llama-3.3-70b-versatile',
           messages: [
             {
-              role: 'user',
+              role: 'system',
               content: `Anda adalah Chef AI Savora, asisten koki profesional Indonesia yang ramah dan membantu.
 
 Tugas Anda:
 - Menjawab pertanyaan tentang memasak dalam Bahasa Indonesia
 - Memberikan tips praktis dan mudah dipahami
 - Menjelaskan dengan detail tapi tidak bertele-tele
-- Selalu ramah dan suportif
-
-Pertanyaan: ${userMessage}`
+- Selalu ramah dan suportif`
+            },
+            {
+              role: 'user',
+              content: userMessage
             }
           ],
+          temperature: 0.7,
+          max_tokens: 1000,
+          top_p: 0.9,
         }),
       })
 
       const data = await response.json()
       
-      if (data.content && data.content[0]?.text) {
+      if (data.choices && data.choices[0]?.message?.content) {
         setMessages(prev => [...prev, {
           role: 'assistant',
-          content: data.content[0].text
+          content: data.choices[0].message.content
         }])
       } else {
         throw new Error('Invalid response')
@@ -96,6 +101,7 @@ Pertanyaan: ${userMessage}`
 
   return (
     <>
+      {/* Main Content - INI YANG PENTING! */}
       {children}
 
       {/* Floating Chat Button */}
@@ -120,7 +126,7 @@ Pertanyaan: ${userMessage}`
               </div>
               <div>
                 <h3 className="font-bold text-lg">Chef AI Savora</h3>
-                <p className="text-xs text-white/90">Asisten memasak Anda</p>
+                <p className="text-xs text-white/90">Powered by Groq ⚡</p>
               </div>
             </div>
             <button

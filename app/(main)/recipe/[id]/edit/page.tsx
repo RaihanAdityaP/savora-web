@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { use, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import Image from 'next/image'
@@ -12,7 +12,10 @@ interface Category {
   name: string
 }
 
-export default function EditRecipePage({ params }: { params: { id: string } }) {
+export default function EditRecipePage({ params }: { params: Promise<{ id: string }> }) {
+  // Unwrap params Promise
+  const { id: recipeId } = use(params)
+  
   const router = useRouter()
   const supabase = createClient()
   
@@ -45,7 +48,7 @@ export default function EditRecipePage({ params }: { params: { id: string } }) {
   useEffect(() => {
     loadCategories()
     loadRecipe()
-  }, [params.id])
+  }, [recipeId])
 
   const loadCategories = async () => {
     try {
@@ -68,7 +71,7 @@ export default function EditRecipePage({ params }: { params: { id: string } }) {
           *,
           recipe_tags(tags(name))
         `)
-        .eq('id', params.id)
+        .eq('id', recipeId)
         .single()
 
       if (error) throw error
@@ -262,7 +265,7 @@ export default function EditRecipePage({ params }: { params: { id: string } }) {
       const { error: updateError } = await supabase
         .from('recipes')
         .update(updateData)
-        .eq('id', params.id)
+        .eq('id', recipeId)
 
       if (updateError) throw updateError
 
@@ -270,17 +273,17 @@ export default function EditRecipePage({ params }: { params: { id: string } }) {
       await supabase
         .from('recipe_tags')
         .delete()
-        .eq('recipe_id', params.id)
+        .eq('recipe_id', recipeId)
 
       for (const tagName of tags) {
         await (supabase.rpc as any)('add_tag_to_recipe', {
-          p_recipe_id: params.id,
+          p_recipe_id: recipeId,
           p_tag_name: tagName
         })
       }
 
       toast.success('Resep berhasil diperbarui!')
-      router.push(`/recipe/${params.id}`)
+      router.push(`/recipe/${recipeId}`)
     } catch (err) {
       console.error('Error updating recipe:', err)
       toast.error('Gagal memperbarui resep')
