@@ -4,10 +4,9 @@ import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
-import CustomAppBar from '@/components/ui/custom-app-bar'
-import CustomBottomNav from '@/components/ui/custom-bottom-nav'
+import UnifiedNavigation from '@/components/ui/unified-navigation'
 import RecipeCard from '@/components/ui/recipe-card'
-import { Flame } from 'lucide-react'
+import { Flame, ChefHat, Bookmark, Users, Sparkles, TrendingUp } from 'lucide-react'
 
 interface Recipe {
   id: string
@@ -34,18 +33,6 @@ interface Recipe {
   }>
 }
 
-interface ProfileData {
-  username: string | null
-  avatar_url: string | null
-  total_recipes: number
-  total_bookmarks: number
-  total_followers: number
-}
-
-interface RatingData {
-  rating: number
-}
-
 interface UserStats {
   total_recipes: number
   total_bookmarks: number
@@ -53,12 +40,12 @@ interface UserStats {
 }
 
 const DAILY_QUOTES = [
-  { quote: 'Masakan terbaik dibuat dengan cinta ❤', author: 'Chef Julia Child' },
-  { quote: 'Memasak adalah seni yang bisa dinikmati semua orang 🎨', author: 'Gordon Ramsay' },
-  { quote: 'Resep adalah cerita yang berakhir dengan makanan lezat 📖', author: 'Pat Conroy' },
-  { quote: 'Kebahagiaan dimulai dari dapur 🍳', author: 'Traditional Wisdom' },
-  { quote: 'Setiap chef adalah seniman dengan palet rasa 🎭', author: 'Anonymous' },
-  { quote: 'Masak dengan hati, sajikan dengan senyuman 😊', author: 'Savora Community' },
+  { quote: 'Masakan terbaik dibuat dengan cinta', author: 'Chef Julia Child' },
+  { quote: 'Memasak adalah seni yang bisa dinikmati semua orang', author: 'Gordon Ramsay' },
+  { quote: 'Resep adalah cerita yang berakhir dengan makanan lezat', author: 'Pat Conroy' },
+  { quote: 'Kebahagiaan dimulai dari dapur', author: 'Traditional Wisdom' },
+  { quote: 'Setiap chef adalah seniman dengan palet rasa', author: 'Anonymous' },
+  { quote: 'Masak dengan hati, sajikan dengan senyuman', author: 'Savora Community' },
 ]
 
 export default function HomePage() {
@@ -236,55 +223,77 @@ export default function HomePage() {
 
   return (
     <div className="min-h-screen bg-[#F5F7FA]">
-      <CustomAppBar />
+      <UnifiedNavigation avatarUrl={avatarUrl} />
       
       <div className="max-w-7xl mx-auto pb-24 md:pb-8">
-        {/* Welcome Card */}
+        {/* Welcome Section */}
         <div className="p-4 md:p-6 lg:p-8 animate-fade-in">
-          <div className="bg-gradient-to-br from-[#264653] via-[#2A9D8F] to-[#E76F51] rounded-3xl shadow-2xl overflow-hidden">
-            <div className="p-6 md:p-8">
-              {/* Greeting */}
-              <div className="mb-6">
-                <h1 className="text-2xl md:text-3xl lg:text-4xl font-bold text-white mb-2 tracking-tight">
-                  Halo, {username || 'Foodie'}! 👋
-                </h1>
-                <p className="text-white/90 text-sm md:text-base">
-                  Selamat datang kembali di Savora
-                </p>
-              </div>
+          <div className="mb-6">
+            <h1 className="text-2xl md:text-3xl lg:text-4xl font-bold text-gray-900 mb-2 tracking-tight">
+              Halo, {username || 'Foodie'}!
+            </h1>
+            <p className="text-gray-600 text-sm md:text-base">
+              Selamat datang kembali di Savora
+            </p>
+          </div>
+        </div>
 
-              {/* Stats */}
-              <div className="grid grid-cols-3 gap-3 md:gap-4 mb-6">
+        {/* Full Width Scrollable Events Carousel */}
+        <div className="overflow-x-auto pb-6 scrollbar-hide">
+          <div className="flex gap-4 px-4 md:px-6 lg:px-8">
+            {/* Stats Card */}
+            <div className="bg-gradient-to-br from-[#264653] via-[#2A9D8F] to-[#E76F51] rounded-3xl shadow-2xl p-6 min-w-[85vw] md:min-w-[450px] flex-shrink-0">
+              <div className="flex items-center gap-2 mb-4">
+                <TrendingUp className="w-5 h-5 text-white" />
+                <h3 className="text-white font-bold text-lg">Statistik Anda</h3>
+              </div>
+              
+              <div className="grid grid-cols-3 gap-3">
                 <StatCard
-                  icon="🍳"
+                  icon={ChefHat}
                   value={userStats.total_recipes}
-                  label="Resep Saya"
+                  label="Resep"
                 />
                 <StatCard
-                  icon="📑"
+                  icon={Bookmark}
                   value={userStats.total_bookmarks}
                   label="Tersimpan"
                 />
                 <StatCard
-                  icon="👥"
+                  icon={Users}
                   value={userStats.total_followers}
                   label="Pengikut"
                 />
               </div>
+            </div>
 
-              {/* Daily Quote */}
-              <div className="bg-white/15 backdrop-blur-sm rounded-2xl p-4 md:p-5 border-2 border-white/30">
-                <div className="flex items-center gap-2 mb-3">
-                  <span className="text-white text-xl">💭</span>
-                  <span className="text-white/90 text-xs md:text-sm font-semibold tracking-wide">
-                    INSPIRASI HARI INI
-                  </span>
-                </div>
-                <p className="text-white text-sm md:text-base italic leading-relaxed mb-2">
-                  {dailyQuote.quote}
+            {/* Daily Quote Card */}
+            <div className="bg-gradient-to-br from-[#E76F51] via-[#F4A261] to-[#E9C46A] rounded-3xl shadow-2xl p-6 min-w-[85vw] md:min-w-[450px] flex-shrink-0">
+              <div className="flex items-center gap-2 mb-4">
+                <Sparkles className="w-5 h-5 text-white" />
+                <h3 className="text-white font-bold text-lg">Inspirasi Hari Ini</h3>
+              </div>
+              
+              <div className="bg-white/20 backdrop-blur-sm rounded-2xl p-4 border-2 border-white/30">
+                <p className="text-white text-sm md:text-base italic leading-relaxed mb-3">
+                  "{dailyQuote.quote}"
                 </p>
-                <p className="text-white/85 text-xs md:text-sm">
+                <p className="text-white/90 text-xs md:text-sm font-medium">
                   — {dailyQuote.author}
+                </p>
+              </div>
+            </div>
+
+            {/* Placeholder for Future Events */}
+            <div className="bg-gradient-to-br from-purple-500 via-pink-500 to-rose-500 rounded-3xl shadow-2xl p-6 min-w-[85vw] md:min-w-[450px] flex-shrink-0">
+              <div className="flex items-center gap-2 mb-4">
+                <Sparkles className="w-5 h-5 text-white" />
+                <h3 className="text-white font-bold text-lg">Event Mendatang</h3>
+              </div>
+              
+              <div className="bg-white/20 backdrop-blur-sm rounded-2xl p-4 border-2 border-white/30 text-center h-24 flex items-center justify-center">
+                <p className="text-white text-sm">
+                  Segera hadir...
                 </p>
               </div>
             </div>
@@ -330,19 +339,35 @@ export default function HomePage() {
         </div>
       </div>
 
-      <CustomBottomNav avatarUrl={avatarUrl} />
+      <style jsx global>{`
+        .scrollbar-hide::-webkit-scrollbar {
+          display: none;
+        }
+        .scrollbar-hide {
+          -ms-overflow-style: none;
+          scrollbar-width: none;
+        }
+      `}</style>
     </div>
   )
 }
 
-function StatCard({ icon, value, label }: { icon: string; value: number; label: string }) {
+function StatCard({ 
+  icon: Icon, 
+  value, 
+  label 
+}: { 
+  icon: React.ComponentType<{ className?: string }>
+  value: number
+  label: string 
+}) {
   return (
-    <div className="bg-white/20 backdrop-blur-sm rounded-xl md:rounded-2xl p-3 md:p-4 border-2 border-white/30 text-center hover:bg-white/25 transition-all">
-      <div className="text-2xl md:text-3xl mb-1.5">{icon}</div>
-      <div className="text-lg md:text-xl lg:text-2xl font-bold text-white leading-none mb-1.5">
+    <div className="bg-white/20 backdrop-blur-sm rounded-xl p-3 border-2 border-white/30 text-center hover:bg-white/25 transition-all">
+      <Icon className="w-6 h-6 text-white mx-auto mb-2" />
+      <div className="text-xl font-bold text-white leading-none mb-1">
         {value}
       </div>
-      <div className="text-white/90 text-[10px] md:text-xs font-medium leading-tight">
+      <div className="text-white/90 text-xs font-medium leading-tight">
         {label}
       </div>
     </div>
@@ -352,8 +377,8 @@ function StatCard({ icon, value, label }: { icon: string; value: number; label: 
 function EmptyState() {
   return (
     <div className="text-center py-16 md:py-24 px-8">
-      <div className="w-32 h-32 md:w-40 md:h-40 mx-auto mb-6 rounded-full bg-gradient-to-br from-[#E76F51]/20 to-[#F4A261]/20 flex items-center justify-center shadow-xl animate-bounce">
-        <span className="text-6xl md:text-7xl">🍳</span>
+      <div className="w-32 h-32 md:w-40 md:h-40 mx-auto mb-6 rounded-full bg-gradient-to-br from-[#E76F51]/20 to-[#F4A261]/20 flex items-center justify-center shadow-xl">
+        <ChefHat className="w-16 h-16 md:w-20 md:h-20 text-[#E76F51]" />
       </div>
       <h3 className="text-2xl md:text-3xl lg:text-4xl font-bold text-gray-900 mb-4">
         Belum Ada Resep
@@ -365,7 +390,7 @@ function EmptyState() {
         href="/create"
         className="inline-flex items-center gap-3 px-8 md:px-10 py-4 md:py-5 bg-gradient-to-r from-[#E76F51] to-[#F4A261] text-white rounded-2xl font-bold shadow-xl hover:shadow-2xl transition-all hover:scale-105"
       >
-        <span className="text-xl md:text-2xl">➕</span>
+        <ChefHat className="w-6 h-6" />
         <span className="text-base md:text-lg">Buat Resep Pertama</span>
       </a>
     </div>
