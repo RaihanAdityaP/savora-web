@@ -35,7 +35,7 @@ export async function GET(request: Request) {
         }
       }
 
-      // Success - redirect to home
+      // ✅ Langsung redirect ke home
       return NextResponse.redirect(`${origin}/home`)
       
     } catch (error) {
@@ -44,6 +44,5 @@ export async function GET(request: Request) {
     }
   }
 
-  // No code provided
   return NextResponse.redirect(`${origin}/login`)
 }

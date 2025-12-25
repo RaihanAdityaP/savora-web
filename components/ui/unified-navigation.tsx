@@ -111,12 +111,28 @@ export default function UnifiedNavigation({ avatarUrl }: UnifiedNavigationProps)
     }
   }
 
-  const handleLogout = async () => {
-    if (!confirm('Keluar dari akun Savora?')) return
-    await supabase.auth.signOut()
+const handleLogout = async () => {
+  if (!confirm('Keluar dari akun Savora?')) return
+  
+  try {
+    const { error } = await supabase.auth.signOut()
+    
+    if (error) {
+      console.error('Sign out error:', error)
+      // Tetap lanjutkan logout meskipun ada error
+    }
+    
     toast.success('Berhasil keluar')
     router.push('/login')
+    router.refresh()
+  } catch (err) {
+    console.error('Unexpected logout error:', err)
+    // Force logout by clearing local data
+    toast.success('Berhasil keluar')
+    router.push('/login')
+    router.refresh()
   }
+}
 
   const profileMenuItems = [
     { label: 'Home', icon: Home, path: '/home' },
