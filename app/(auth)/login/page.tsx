@@ -14,6 +14,9 @@ type ProfileCheck = Pick<
   'is_banned' | 'banned_reason' | 'banned_at'
 >
 
+// KONSTANTA - Ganti dengan domain utama kamu
+const MAIN_APP_URL = 'https://savora-web.vercel.app'
+
 // Komponen terpisah yang menggunakan useSearchParams
 function LoginFormContent() {
   const [email, setEmail] = useState('')
@@ -104,7 +107,8 @@ function LoginFormContent() {
       const { error: authError } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: `${window.location.origin}/api/auth/callback`,
+          // ✅ FIXED: Selalu gunakan domain utama untuk redirect
+          redirectTo: `${MAIN_APP_URL}/api/auth/callback`,
         },
       })
 
@@ -332,4 +336,4 @@ export default function LoginPage() {
       <LoginFormContent />
     </Suspense>
   )
-}
+} 
