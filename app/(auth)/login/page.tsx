@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Suspense } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
@@ -14,7 +14,8 @@ type ProfileCheck = Pick<
   'is_banned' | 'banned_reason' | 'banned_at'
 >
 
-export default function LoginPage() {
+// Komponen terpisah yang menggunakan useSearchParams
+function LoginFormContent() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
@@ -290,5 +291,45 @@ export default function LoginPage() {
         </div>
       </div>
     </div>
+  )
+}
+
+// Loading fallback component
+function LoginFormLoading() {
+  return (
+    <div className="animate-scale-in">
+      <div className="text-center mb-8">
+        <div className="inline-block px-6 py-3 bg-white/20 backdrop-blur-md rounded-full border-2 border-white/40 shadow-lg mb-4">
+          <span className="text-white text-sm font-bold tracking-wider">
+            SELAMAT DATANG
+          </span>
+        </div>
+        
+        <h1 className="text-5xl md:text-6xl font-black text-white mb-3 tracking-tight">
+          Savora
+        </h1>
+        
+        <p className="text-white/90 text-base font-medium">
+          Petualangan Kuliner Dimulai Disini
+        </p>
+      </div>
+
+      <div className="bg-white rounded-3xl shadow-2xl p-8 md:p-10">
+        <div className="animate-pulse space-y-5">
+          <div className="h-14 bg-gray-200 rounded-2xl"></div>
+          <div className="h-14 bg-gray-200 rounded-2xl"></div>
+          <div className="h-14 bg-gray-200 rounded-2xl"></div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// Main component dengan Suspense
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<LoginFormLoading />}>
+      <LoginFormContent />
+    </Suspense>
   )
 }
