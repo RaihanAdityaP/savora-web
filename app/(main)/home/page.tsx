@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import UnifiedNavigation from '@/components/ui/unified-navigation'
 import RecipeCard from '@/components/ui/recipe-card'
-import { Flame, ChefHat, Bookmark, Users, Sparkles, TrendingUp } from 'lucide-react'
+import { Flame, ChefHat, Bookmark, Users, Sparkles, TrendingUp, ChevronLeft, ChevronRight } from 'lucide-react'
 
 interface Recipe {
   id: string
@@ -48,6 +48,8 @@ const DAILY_QUOTES = [
   { quote: 'Masak dengan hati, sajikan dengan senyuman', author: 'Savora Community' },
 ]
 
+const ITEMS_PER_PAGE = 12
+
 export default function HomePage() {
   const router = useRouter()
   const supabase = createClient()
@@ -56,6 +58,8 @@ export default function HomePage() {
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [recipes, setRecipes] = useState<Recipe[]>([])
+  const [currentPage, setCurrentPage] = useState(1)
+  const [totalRecipes, setTotalRecipes] = useState(0)
   const [userStats, setUserStats] = useState<UserStats>({
     total_recipes: 0,
     total_bookmarks: 0,
@@ -66,10 +70,13 @@ export default function HomePage() {
   useEffect(() => {
     loadUserData()
     loadUserStats()
-    loadPopularRecipes()
     const cleanup = setupBannedListener()
     return cleanup
   }, [])
+
+  useEffect(() => {
+    loadPopularRecipes(currentPage)
+  }, [currentPage])
 
   const setupBannedListener = () => {
     supabase.auth.getUser().then(({ data: { user } }) => {
@@ -154,9 +161,21 @@ export default function HomePage() {
     }
   }
 
-  const loadPopularRecipes = async () => {
+  const loadPopularRecipes = async (page: number) => {
     setIsLoading(true)
     try {
+      // Get total count first
+      const { count } = await supabase
+        .from('recipes')
+        .select('id', { count: 'exact', head: true })
+        .eq('status', 'approved')
+
+      setTotalRecipes(count || 0)
+
+      // Get paginated data
+      const from = (page - 1) * ITEMS_PER_PAGE
+      const to = from + ITEMS_PER_PAGE - 1
+
       const { data, error } = await supabase
         .from('recipes')
         .select(`
@@ -167,7 +186,7 @@ export default function HomePage() {
         `)
         .eq('status', 'approved')
         .order('views_count', { ascending: false })
-        .limit(20)
+        .range(from, to)
 
       if (error) throw error
 
@@ -206,9 +225,42 @@ export default function HomePage() {
     return DAILY_QUOTES[index]
   }
 
+  const totalPages = Math.ceil(totalRecipes / ITEMS_PER_PAGE)
+
+  const getPageNumbers = () => {
+    const pages = []
+    const maxVisible = 5
+    
+    if (totalPages <= maxVisible) {
+      for (let i = 1; i <= totalPages; i++) {
+        pages.push(i)
+      }
+    } else {
+      if (currentPage <= 3) {
+        for (let i = 1; i <= 4; i++) pages.push(i)
+        pages.push('...')
+        pages.push(totalPages)
+      } else if (currentPage >= totalPages - 2) {
+        pages.push(1)
+        pages.push('...')
+        for (let i = totalPages - 3; i <= totalPages; i++) pages.push(i)
+      } else {
+        pages.push(1)
+        pages.push('...')
+        pages.push(currentPage - 1)
+        pages.push(currentPage)
+        pages.push(currentPage + 1)
+        pages.push('...')
+        pages.push(totalPages)
+      }
+    }
+    
+    return pages
+  }
+
   const dailyQuote = getDailyQuote()
 
-  if (isLoading) {
+  if (isLoading && currentPage === 1) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-white">
         <div className="text-center space-y-4">
@@ -313,7 +365,7 @@ export default function HomePage() {
               <div className="flex items-center gap-1.5">
                 <Flame className="w-4 h-4 md:w-5 md:h-5 text-[#E76F51]" />
                 <span className="text-[#E76F51] text-sm md:text-base font-bold">
-                  {recipes.length}
+                  {totalRecipes}
                 </span>
               </div>
             </div>
@@ -322,19 +374,70 @@ export default function HomePage() {
           {recipes.length === 0 ? (
             <EmptyState />
           ) : (
-            <div className="space-y-0">
-              {recipes.map((recipe) => (
-                <RecipeCard
-                  key={recipe.id}
-                  recipe={recipe}
-                  rating={recipeRatings[recipe.id]}
-                  onTap={() => {
-                    loadUserStats()
-                    loadPopularRecipes()
-                  }}
-                />
-              ))}
-            </div>
+            <>
+              {totalPages > 1 && (
+                <div className="mb-4">
+                  <p className="text-gray-600 text-sm">
+                    Halaman {currentPage} dari {totalPages}
+                  </p>
+                </div>
+              )}
+
+              <div className="space-y-4">
+                {recipes.map((recipe) => (
+                  <RecipeCard
+                    key={recipe.id}
+                    recipe={recipe}
+                    rating={recipeRatings[recipe.id]}
+                    onTap={() => {
+                      loadUserStats()
+                      loadPopularRecipes(currentPage)
+                    }}
+                  />
+                ))}
+              </div>
+
+              {/* Pagination */}
+              {totalPages > 1 && (
+                <div className="mt-8 flex items-center justify-center gap-2">
+                  <button
+                    onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                    disabled={currentPage === 1}
+                    className="p-2 rounded-lg border-2 border-gray-200 hover:border-[#E76F51] disabled:opacity-50 disabled:cursor-not-allowed transition"
+                  >
+                    <ChevronLeft className="w-5 h-5" />
+                  </button>
+
+                  {getPageNumbers().map((page, idx) => (
+                    page === '...' ? (
+                      <span key={`ellipsis-${idx}`} className="px-3 py-2 text-gray-400">
+                        ...
+                      </span>
+                    ) : (
+                      <button
+                        key={page}
+                        onClick={() => setCurrentPage(page as number)}
+                        className={`px-4 py-2 rounded-lg font-semibold transition ${
+                          currentPage === page
+                            ? 'bg-gradient-to-r from-[#E76F51] to-[#F4A261] text-white shadow-lg'
+                            : 'border-2 border-gray-200 hover:border-[#E76F51] text-gray-700'
+                        }`}
+                      >
+                        {page}
+                      </button>
+                    )
+                  ))}
+
+                  <button
+                    onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                    disabled={currentPage === totalPages}
+                    className="p-2 rounded-lg border-2 border-gray-200 hover:border-[#E76F51] disabled:opacity-50 disabled:cursor-not-allowed transition"
+                  >
+                    <ChevronRight className="w-5 h-5" />
+                  </button>
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>
