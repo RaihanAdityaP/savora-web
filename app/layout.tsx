@@ -8,6 +8,9 @@ const inter = Inter({ subsets: ['latin'] })
 export const metadata: Metadata = {
   title: 'Savora - Petualangan Kuliner Dimulai Disini',
   description: 'Platform berbagi resep masakan terbaik',
+  verification: {
+    google: '1RyKwW_N9hpbV_WN59CM5o02h-KCWntW2mGRQRHZCUU',
+  },
 }
 
 export default function RootLayout({
