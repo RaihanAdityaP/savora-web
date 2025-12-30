@@ -1,16 +1,16 @@
 import { Metadata } from 'next'
 import { createClient } from '@/lib/supabase/server'
 import HomeClient from './home-client'
-import { redirect } from 'next/navigation'
 
-// SEO Metadata
+// SEO Metadata - Open Graph & Twitter Cards
 export const metadata: Metadata = {
   title: 'Savora - Petualangan Kuliner Dimulai Disini',
-  description: 'Temukan resep masakan favorit, bagikan kreasi kuliner Anda, dan bergabung dengan komunitas pecinta masak di Savora. Ribuan resep dari berbagai kategori menanti Anda!',
-  keywords: ['resep masakan', 'kuliner', 'masak', 'cooking', 'recipe', 'indonesian food'],
+  description: 'Temukan ribuan resep masakan favorit, bagikan kreasi kuliner Anda, dan bergabung dengan komunitas pecinta masak di Savora. Dari masakan Indonesia hingga internasional!',
+  keywords: ['resep masakan', 'kuliner indonesia', 'masak', 'cooking', 'recipe', 'indonesian food', 'makanan enak', 'belajar masak'],
+  authors: [{ name: 'Rendyt' }],
   openGraph: {
-    title: 'Savora - Petualangan Kuliner Dimulai Disini',
-    description: 'Platform berbagi resep masakan terbaik di Indonesia',
+    title: 'Savora - Jelajahi Ribuan Resep Lezat',
+    description: 'Platform berbagi resep masakan terbaik di Indonesia. Temukan, bagikan, dan simpan resep favorit Anda!',
     url: 'https://savora-web.vercel.app',
     siteName: 'Savora',
     images: [
@@ -29,6 +29,17 @@ export const metadata: Metadata = {
     title: 'Savora - Jelajahi Ribuan Resep Lezat',
     description: 'Platform berbagi resep masakan terbaik',
     images: ['https://savora-web.vercel.app/images/logo.png'],
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      'max-video-preview': -1,
+      'max-image-preview': 'large',
+      'max-snippet': -1,
+    },
   },
 }
 
@@ -73,27 +84,39 @@ async function getInitialData(page: number = 1) {
   const supabase = await createClient()
 
   try {
-    // Get authenticated user
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
+    // ✅ Check if user is logged in (optional - tidak redirect)
+    const { data: { user } } = await supabase.auth.getUser()
     
-    if (authError || !user) {
-      redirect('/login')
+    let userStats: UserStats = {
+      total_recipes: 0,
+      total_bookmarks: 0,
+      total_followers: 0,
+    }
+    let username: string | null = null
+    let avatarUrl: string | null = null
+    let isLoggedIn = false
+
+    // Jika user login, ambil data mereka
+    if (user) {
+      isLoggedIn = true
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('username, avatar_url, total_recipes, total_bookmarks, total_followers')
+        .eq('id', user.id)
+        .single()
+
+      if (profile) {
+        username = profile.username
+        avatarUrl = profile.avatar_url
+        userStats = {
+          total_recipes: profile.total_recipes || 0,
+          total_bookmarks: profile.total_bookmarks || 0,
+          total_followers: profile.total_followers || 0,
+        }
+      }
     }
 
-    // Get user profile data
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('username, avatar_url, total_recipes, total_bookmarks, total_followers')
-      .eq('id', user.id)
-      .single()
-
-    const userStats: UserStats = {
-      total_recipes: profile?.total_recipes || 0,
-      total_bookmarks: profile?.total_bookmarks || 0,
-      total_followers: profile?.total_followers || 0,
-    }
-
-    // Get total recipe count
+    // Get total recipe count (public - accessible by all)
     const { count } = await supabase
       .from('recipes')
       .select('id', { count: 'exact', head: true })
@@ -101,7 +124,7 @@ async function getInitialData(page: number = 1) {
 
     const totalRecipes = count || 0
 
-    // Get paginated recipes
+    // Get paginated recipes (public - accessible by all)
     const from = (page - 1) * ITEMS_PER_PAGE
     const to = from + ITEMS_PER_PAGE - 1
 
@@ -120,8 +143,9 @@ async function getInitialData(page: number = 1) {
     if (recipesError) {
       console.error('Error fetching recipes:', recipesError)
       return {
-        username: profile?.username || null,
-        avatarUrl: profile?.avatar_url || null,
+        isLoggedIn,
+        username,
+        avatarUrl,
         userStats,
         recipes: [],
         totalRecipes: 0,
@@ -135,7 +159,6 @@ async function getInitialData(page: number = 1) {
     // Get ratings for recipes
     const recipeRatings: Record<string, number> = {}
     
-    // Fetch all ratings in parallel
     const ratingPromises = typedRecipes.map(async (recipe) => {
       const { data: ratingData } = await supabase
         .from('recipe_ratings')
@@ -155,8 +178,9 @@ async function getInitialData(page: number = 1) {
     })
 
     return {
-      username: profile?.username || null,
-      avatarUrl: profile?.avatar_url || null,
+      isLoggedIn,
+      username,
+      avatarUrl,
       userStats,
       recipes: typedRecipes,
       totalRecipes,
@@ -165,7 +189,21 @@ async function getInitialData(page: number = 1) {
     }
   } catch (error) {
     console.error('Error in getInitialData:', error)
-    redirect('/login')
+    // Jangan redirect, kembalikan data kosong
+    return {
+      isLoggedIn: false,
+      username: null,
+      avatarUrl: null,
+      userStats: {
+        total_recipes: 0,
+        total_bookmarks: 0,
+        total_followers: 0,
+      },
+      recipes: [],
+      totalRecipes: 0,
+      currentPage: page,
+      recipeRatings: {},
+    }
   }
 }
 

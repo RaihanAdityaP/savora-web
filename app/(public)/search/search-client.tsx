@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { toast } from 'sonner'
 import UnifiedNavigation from '@/components/ui/unified-navigation'
 import RecipeCard from '@/components/ui/recipe-card'
@@ -48,43 +48,62 @@ interface PopularTag {
   usage_count: number
 }
 
+interface SearchClientProps {
+  initialRecipes: Recipe[]
+  initialTotal: number
+  initialRatings: Record<string, number>
+  categories: Category[]
+  popularTags: PopularTag[]
+  currentUser: {
+    id: string
+    avatarUrl: string | null
+  } | null
+  initialFilters: {
+    query: string
+    categoryId: number | null
+    tagId: number | null
+    sortBy: 'popular' | 'newest' | 'rating'
+    page: number
+  }
+}
+
 const ITEMS_PER_PAGE = 12
 
-export default function SearchPage() {
+export default function SearchClient({
+  initialRecipes,
+  initialTotal,
+  initialRatings,
+  categories,
+  popularTags,
+  currentUser,
+  initialFilters
+}: SearchClientProps) {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const supabase = createClient()
 
   // Search State
-  const [searchQuery, setSearchQuery] = useState('')
-  const [recipes, setRecipes] = useState<Recipe[]>([])
+  const [searchQuery, setSearchQuery] = useState(initialFilters.query)
+  const [recipes, setRecipes] = useState<Recipe[]>(initialRecipes)
   const [loading, setLoading] = useState(false)
-  const [currentPage, setCurrentPage] = useState(1)
-  const [totalRecipes, setTotalRecipes] = useState(0)
+  const [currentPage, setCurrentPage] = useState(initialFilters.page)
+  const [totalRecipes, setTotalRecipes] = useState(initialTotal)
 
   // Filter State
-  const [categories, setCategories] = useState<Category[]>([])
-  const [popularTags, setPopularTags] = useState<PopularTag[]>([])
-  const [selectedCategoryId, setSelectedCategoryId] = useState<number | null>(null)
-  const [selectedTagId, setSelectedTagId] = useState<number | null>(null)
-  const [sortBy, setSortBy] = useState<'popular' | 'newest' | 'rating'>('popular')
+  const [selectedCategoryId, setSelectedCategoryId] = useState<number | null>(initialFilters.categoryId)
+  const [selectedTagId, setSelectedTagId] = useState<number | null>(initialFilters.tagId)
+  const [sortBy, setSortBy] = useState<'popular' | 'newest' | 'rating'>(initialFilters.sortBy)
   const [followedUsersOnly, setFollowedUsersOnly] = useState(false)
 
   // UI State
   const [showFilters, setShowFilters] = useState(false)
-  const [recipeRatings, setRecipeRatings] = useState<Record<string, number>>({})
-  const [currentUserId, setCurrentUserId] = useState<string | null>(null)
-  const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
-
-  useEffect(() => {
-    loadCurrentUser()
-    loadCategories()
-    loadPopularTags()
-  }, [])
+  const [recipeRatings, setRecipeRatings] = useState<Record<string, number>>(initialRatings)
 
   useEffect(() => {
     const delaySearch = setTimeout(() => {
-      setCurrentPage(1) // Reset to page 1 when search criteria changes
+      setCurrentPage(1)
       searchRecipes(1)
+      updateURL()
     }, 300)
 
     return () => clearTimeout(delaySearch)
@@ -93,64 +112,26 @@ export default function SearchPage() {
   useEffect(() => {
     if (currentPage > 1) {
       searchRecipes(currentPage)
+      updateURL()
     }
   }, [currentPage])
 
-  const loadCurrentUser = async () => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (user) {
-        setCurrentUserId(user.id)
-        
-        const { data } = await supabase
-          .from('profiles')
-          .select('avatar_url')
-          .eq('id', user.id)
-          .single()
-        
-        if (data) {
-          setAvatarUrl(data.avatar_url)
-        }
-      }
-    } catch (err) {
-      console.error('Error loading user:', err)
-    }
-  }
+  const updateURL = () => {
+    const params = new URLSearchParams()
+    if (searchQuery) params.set('q', searchQuery)
+    if (selectedCategoryId) params.set('category', selectedCategoryId.toString())
+    if (selectedTagId) params.set('tag', selectedTagId.toString())
+    if (sortBy !== 'popular') params.set('sort', sortBy)
+    if (currentPage > 1) params.set('page', currentPage.toString())
 
-  const loadCategories = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('categories')
-        .select('id, name, slug')
-        .order('name')
-
-      if (error) throw error
-      setCategories(data || [])
-    } catch (err) {
-      console.error('Error loading categories:', err)
-    }
-  }
-
-  const loadPopularTags = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('tags')
-        .select('id, name, usage_count')
-        .eq('is_approved', true)
-        .order('usage_count', { ascending: false })
-        .limit(20)
-
-      if (error) throw error
-      setPopularTags(data || [])
-    } catch (err) {
-      console.error('Error loading tags:', err)
-    }
+    const newURL = params.toString() ? `/search?${params.toString()}` : '/search'
+    router.replace(newURL, { scroll: false })
   }
 
   const searchRecipes = async (page: number) => {
     setLoading(true)
     try {
-      // First, get total count
+      // Get total count
       let countQuery = supabase
         .from('recipes')
         .select('id', { count: 'exact', head: true })
@@ -164,11 +145,11 @@ export default function SearchPage() {
         countQuery = countQuery.eq('category_id', selectedCategoryId)
       }
 
-      if (followedUsersOnly && currentUserId) {
+      if (followedUsersOnly && currentUser) {
         const { data: follows } = await supabase
           .from('follows')
           .select('following_id')
-          .eq('follower_id', currentUserId)
+          .eq('follower_id', currentUser.id)
 
         const followingIds = follows?.map(f => f.following_id) || []
         if (followingIds.length > 0) {
@@ -184,7 +165,7 @@ export default function SearchPage() {
       const { count } = await countQuery
       setTotalRecipes(count || 0)
 
-      // Then get paginated data
+      // Get paginated data
       let query = supabase
         .from('recipes')
         .select(`
@@ -203,11 +184,11 @@ export default function SearchPage() {
         query = query.eq('category_id', selectedCategoryId)
       }
 
-      if (followedUsersOnly && currentUserId) {
+      if (followedUsersOnly && currentUser) {
         const { data: follows } = await supabase
           .from('follows')
           .select('following_id')
-          .eq('follower_id', currentUserId)
+          .eq('follower_id', currentUser.id)
 
         const followingIds = follows?.map(f => f.following_id) || []
         if (followingIds.length > 0) {
@@ -240,7 +221,7 @@ export default function SearchPage() {
 
       let filteredRecipes = (data || []) as Recipe[]
 
-      // Filter by tag (client-side because of join structure)
+      // Filter by tag
       if (selectedTagId) {
         filteredRecipes = filteredRecipes.filter(recipe => {
           return recipe.recipe_tags?.some(rt => rt.tags?.id === selectedTagId)
@@ -298,7 +279,7 @@ export default function SearchPage() {
   const totalPages = Math.ceil(totalRecipes / ITEMS_PER_PAGE)
 
   const getPageNumbers = () => {
-    const pages = []
+    const pages: (number | string)[] = []
     const maxVisible = 5
     
     if (totalPages <= maxVisible) {
@@ -330,7 +311,7 @@ export default function SearchPage() {
 
   return (
     <div className="min-h-screen bg-[#F5F7FA]">
-      <UnifiedNavigation avatarUrl={avatarUrl} />
+      <UnifiedNavigation avatarUrl={currentUser?.avatarUrl || null} />
       
       <div className="max-w-7xl mx-auto pb-24 md:pb-8">
         {/* Search Header */}
@@ -430,21 +411,18 @@ export default function SearchPage() {
                   <div className="flex flex-wrap gap-2">
                     <SortChip
                       label="Terpopuler"
-                      value="popular"
                       icon={TrendingUp}
                       active={sortBy === 'popular'}
                       onClick={() => setSortBy('popular')}
                     />
                     <SortChip
                       label="Terbaru"
-                      value="newest"
                       icon={Clock}
                       active={sortBy === 'newest'}
                       onClick={() => setSortBy('newest')}
                     />
                     <SortChip
                       label="Rating Tertinggi"
-                      value="rating"
                       icon={Star}
                       active={sortBy === 'rating'}
                       onClick={() => setSortBy('rating')}
@@ -453,24 +431,26 @@ export default function SearchPage() {
                 </div>
 
                 {/* Followed Users Filter */}
-                <div className="flex items-center justify-between p-4 bg-gradient-to-r from-[#F4A261]/10 to-[#E9C46A]/10 rounded-xl border-2 border-[#F4A261]/30">
-                  <div className="flex items-center gap-3">
-                    <Users className="w-5 h-5 text-[#F4A261]" />
-                    <div>
-                      <p className="font-bold text-gray-900">Dari yang Diikuti</p>
-                      <p className="text-sm text-gray-600">Hanya tampilkan resep dari pengguna yang Anda ikuti</p>
+                {currentUser && (
+                  <div className="flex items-center justify-between p-4 bg-gradient-to-r from-[#F4A261]/10 to-[#E9C46A]/10 rounded-xl border-2 border-[#F4A261]/30">
+                    <div className="flex items-center gap-3">
+                      <Users className="w-5 h-5 text-[#F4A261]" />
+                      <div>
+                        <p className="font-bold text-gray-900">Dari yang Diikuti</p>
+                        <p className="text-sm text-gray-600">Hanya tampilkan resep dari pengguna yang Anda ikuti</p>
+                      </div>
                     </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={followedUsersOnly}
+                        onChange={(e) => setFollowedUsersOnly(e.target.checked)}
+                        className="sr-only peer"
+                      />
+                      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-[#F4A261]/20 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#F4A261]"></div>
+                    </label>
                   </div>
-                  <label className="relative inline-flex items-center cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={followedUsersOnly}
-                      onChange={(e) => setFollowedUsersOnly(e.target.checked)}
-                      className="sr-only peer"
-                    />
-                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-[#F4A261]/20 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#F4A261]"></div>
-                  </label>
-                </div>
+                )}
 
                 {/* Categories */}
                 <div>
@@ -623,7 +603,7 @@ export default function SearchPage() {
   )
 }
 
-function SortChip({ label, value, icon: Icon, active, onClick }: any) {
+function SortChip({ label, icon: Icon, active, onClick }: any) {
   return (
     <button
       onClick={onClick}

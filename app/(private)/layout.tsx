@@ -1,7 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 
-export default async function MainLayout({
+export default async function PrivateLayout({
   children,
 }: {
   children: React.ReactNode
@@ -12,7 +12,8 @@ export default async function MainLayout({
   const { data: { user } } = await supabase.auth.getUser()
   
   if (!user) {
-    redirect('/login')
+    // Redirect to login with return URL
+    redirect('/login?redirect=/home')
   }
   
   // Check if user is banned

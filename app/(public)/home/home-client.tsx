@@ -1,10 +1,14 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import UnifiedNavigation from '@/components/ui/unified-navigation'
 import RecipeCard from '@/components/ui/recipe-card'
-import { Flame, ChefHat, Bookmark, Users, Sparkles, TrendingUp, ChevronLeft, ChevronRight } from 'lucide-react'
+import { 
+  Flame, ChefHat, Bookmark, Users, Sparkles, TrendingUp, 
+  ChevronLeft, ChevronRight, LogIn, UserPlus, Lock, Trophy 
+} from 'lucide-react'
 
 interface Recipe {
   id: string
@@ -40,6 +44,7 @@ interface UserStats {
 
 interface HomeClientProps {
   initialData: {
+    isLoggedIn: boolean
     username: string | null
     avatarUrl: string | null
     userStats: UserStats
@@ -51,13 +56,32 @@ interface HomeClientProps {
 }
 
 const DAILY_QUOTES = [
-  { quote: 'Masakan terbaik dibuat dengan cinta', author: 'Chef Julia Child' },
-  { quote: 'Memasak adalah seni yang bisa dinikmati semua orang', author: 'Gordon Ramsay' },
-  { quote: 'Resep adalah cerita yang berakhir dengan makanan lezat', author: 'Pat Conroy' },
-  { quote: 'Kebahagiaan dimulai dari dapur', author: 'Traditional Wisdom' },
-  { quote: 'Setiap chef adalah seniman dengan palet rasa', author: 'Anonymous' },
-  { quote: 'Masak dengan hati, sajikan dengan senyuman', author: 'Savora Community' },
+  { 
+    quote: 'People who love to eat are always the best people.', 
+    author: 'Julia Child' 
+  },
+  { 
+    quote: 'Cooking is about passion, so it may look slightly temperamental in a way that it’s too assertive to the naked eye.', 
+    author: 'Gordon Ramsay' 
+  },
+  { 
+    quote: 'No one is born a great cook, one learns by doing.', 
+    author: 'Julia Child' 
+  },
+  { 
+    quote: 'A recipe has no soul. You, as the cook, must bring soul to the recipe.', 
+    author: 'Thomas Keller' 
+  },
+  { 
+    quote: 'Cooking well doesn’t mean cooking fancy.', 
+    author: 'Alice Waters' 
+  },
+  { 
+    quote: 'Food is symbolic of love when words are inadequate.', 
+    author: 'Alan D. Wolfelt' 
+  },
 ]
+
 
 const ITEMS_PER_PAGE = 12
 
@@ -65,7 +89,15 @@ export default function HomeClient({ initialData }: HomeClientProps) {
   const router = useRouter()
   const [currentPage, setCurrentPage] = useState(initialData.currentPage)
 
-  const { username, avatarUrl, userStats, recipes, totalRecipes, recipeRatings } = initialData
+  const { 
+    isLoggedIn, 
+    username, 
+    avatarUrl, 
+    userStats, 
+    recipes, 
+    totalRecipes, 
+    recipeRatings 
+  } = initialData
 
   const getDailyQuote = () => {
     const now = new Date()
@@ -126,42 +158,71 @@ export default function HomeClient({ initialData }: HomeClientProps) {
         <div className="p-4 md:p-6 lg:p-8 animate-fade-in">
           <div className="mb-6">
             <h1 className="text-2xl md:text-3xl lg:text-4xl font-bold text-gray-900 mb-2 tracking-tight">
-              Halo, {username || 'Foodie'}!
+              {isLoggedIn 
+                ? `Halo, ${username || 'Foodie'}!` 
+                : 'Selamat Datang di Savora!'}
             </h1>
             <p className="text-gray-600 text-sm md:text-base">
-              Selamat datang kembali di Savora
+              {isLoggedIn 
+                ? 'Selamat datang kembali di Savora' 
+                : 'Jelajahi ribuan resep lezat dari komunitas kami'}
             </p>
           </div>
         </div>
 
-        {/* Full Width Scrollable Events Carousel */}
-        <div className="overflow-x-auto pb-6 scrollbar-hide">
-          <div className="flex gap-4 px-4 md:px-6 lg:px-8">
-            {/* Stats Card */}
-            <div className="bg-gradient-to-br from-[#264653] via-[#2A9D8F] to-[#E76F51] rounded-3xl shadow-2xl p-6 min-w-[85vw] md:min-w-[450px] flex-shrink-0">
-              <div className="flex items-center gap-2 mb-4">
-                <TrendingUp className="w-5 h-5 text-white" />
-                <h3 className="text-white font-bold text-lg">Statistik Anda</h3>
+        {/* Login Notice Banner - Only show if not logged in */}
+        {!isLoggedIn && (
+          <div className="mx-4 md:mx-6 lg:mx-8 mb-6 bg-gradient-to-r from-[#E76F51] to-[#F4A261] rounded-3xl shadow-2xl p-6 md:p-8">
+            <div className="flex flex-col md:flex-row items-center gap-6">
+              <div className="w-16 h-16 bg-white/20 rounded-2xl flex items-center justify-center flex-shrink-0">
+                <Lock className="w-8 h-8 text-white" />
               </div>
-              
-              <div className="grid grid-cols-3 gap-3">
-                <StatCard
-                  icon={ChefHat}
-                  value={userStats.total_recipes}
-                  label="Resep"
-                />
-                <StatCard
-                  icon={Bookmark}
-                  value={userStats.total_bookmarks}
-                  label="Tersimpan"
-                />
-                <StatCard
-                  icon={Users}
-                  value={userStats.total_followers}
-                  label="Pengikut"
-                />
+              <div className="flex-1 text-center md:text-left">
+                <h3 className="text-white text-xl md:text-2xl font-bold mb-2">
+                  Bergabunglah dengan Savora!
+                </h3>
+                <p className="text-white/90 text-sm md:text-base mb-4">
+                  Login untuk menyimpan resep favorit, membuat koleksi, dan berinteraksi dengan komunitas
+                </p>
+                <div className="flex flex-col sm:flex-row gap-3 justify-center md:justify-start">
+                  <Link
+                    href="/login"
+                    className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-white text-[#E76F51] rounded-xl font-bold hover:bg-white/90 transition-all hover:scale-105 shadow-lg"
+                  >
+                    <LogIn className="w-5 h-5" />
+                    Masuk
+                  </Link>
+                  <Link
+                    href="/register"
+                    className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-white/20 backdrop-blur-sm text-white rounded-xl font-bold border-2 border-white/40 hover:bg-white/30 transition-all hover:scale-105"
+                  >
+                    <UserPlus className="w-5 h-5" />
+                    Daftar Gratis
+                  </Link>
+                </div>
               </div>
             </div>
+          </div>
+        )}
+
+        {/* Scrollable Events Carousel */}
+        <div className="overflow-x-auto pb-6 scrollbar-hide">
+          <div className="flex gap-4 px-4 md:px-6 lg:px-8">
+            {/* Stats Card - Only show if logged in */}
+            {isLoggedIn && (
+              <div className="bg-gradient-to-br from-[#264653] via-[#2A9D8F] to-[#E76F51] rounded-3xl shadow-2xl p-6 min-w-[85vw] md:min-w-[450px] flex-shrink-0">
+                <div className="flex items-center gap-2 mb-4">
+                  <TrendingUp className="w-5 h-5 text-white" />
+                  <h3 className="text-white font-bold text-lg">Statistik Anda</h3>
+                </div>
+                
+                <div className="grid grid-cols-3 gap-3">
+                  <StatCard icon={ChefHat} value={userStats.total_recipes} label="Resep" />
+                  <StatCard icon={Bookmark} value={userStats.total_bookmarks} label="Tersimpan" />
+                  <StatCard icon={Users} value={userStats.total_followers} label="Pengikut" />
+                </div>
+              </div>
+            )}
 
             {/* Daily Quote Card */}
             <div className="bg-gradient-to-br from-[#E76F51] via-[#F4A261] to-[#E9C46A] rounded-3xl shadow-2xl p-6 min-w-[85vw] md:min-w-[450px] flex-shrink-0">
@@ -180,17 +241,20 @@ export default function HomeClient({ initialData }: HomeClientProps) {
               </div>
             </div>
 
-            {/* Placeholder for Future Events */}
+            {/* Event & Competition Card - Coming Soon */}
             <div className="bg-gradient-to-br from-purple-500 via-pink-500 to-rose-500 rounded-3xl shadow-2xl p-6 min-w-[85vw] md:min-w-[450px] flex-shrink-0">
               <div className="flex items-center gap-2 mb-4">
-                <Sparkles className="w-5 h-5 text-white" />
-                <h3 className="text-white font-bold text-lg">Event Mendatang</h3>
+                <Trophy className="w-5 h-5 text-white" />
+                <h3 className="text-white font-bold text-lg">Event & Kompetisi</h3>
               </div>
               
-              <div className="bg-white/20 backdrop-blur-sm rounded-2xl p-4 border-2 border-white/30 text-center h-24 flex items-center justify-center">
-                <p className="text-white text-sm">
-                  Segera hadir...
-                </p>
+              <div className="bg-white/20 backdrop-blur-sm rounded-2xl p-4 border-2 border-white/30">
+                <div className="text-center py-2">
+                  <div className="text-2xl font-bold text-white mb-2">Coming Soon</div>
+                  <div className="text-white/90 text-sm">
+                    Ikuti event dan kompetisi menarik dari Savora
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -233,6 +297,7 @@ export default function HomeClient({ initialData }: HomeClientProps) {
                     key={recipe.id}
                     recipe={recipe}
                     rating={recipeRatings[recipe.id]}
+                    hideBookmark={!isLoggedIn}
                   />
                 ))}
               </div>
@@ -329,13 +394,13 @@ function EmptyState() {
       <p className="text-gray-600 text-base md:text-lg mb-10 max-w-md mx-auto leading-relaxed">
         Jadilah yang pertama membagikan resep lezat dan inspirasi kuliner!
       </p>
-      <a
+      <Link
         href="/create"
         className="inline-flex items-center gap-3 px-8 md:px-10 py-4 md:py-5 bg-gradient-to-r from-[#E76F51] to-[#F4A261] text-white rounded-2xl font-bold shadow-xl hover:shadow-2xl transition-all hover:scale-105"
       >
         <ChefHat className="w-6 h-6" />
         <span className="text-base md:text-lg">Buat Resep Pertama</span>
-      </a>
+      </Link>
     </div>
   )
 }

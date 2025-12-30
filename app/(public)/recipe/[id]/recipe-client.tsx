@@ -1,6 +1,6 @@
 'use client'
 
-import { use, useEffect, useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import Image from 'next/image'
@@ -53,24 +53,32 @@ interface Comment {
   } | null
 }
 
-interface PageProps {
-  params: Promise<{ id: string }>
+interface RecipeClientProps {
+  recipe: Recipe
+  initialRating: {
+    average: number | null
+    count: number
+  }
+  initialComments: Comment[]
+  currentUser: {
+    id: string
+    role: string
+  } | null
 }
 
-export default function RecipeDetailPage({ params }: PageProps) {
-  const { id: recipeId } = use(params)
-  
+export default function RecipeClient({
+  recipe,
+  initialRating,
+  initialComments,
+  currentUser,
+}: RecipeClientProps) {
   const router = useRouter()
   const supabase = createClient()
-  const [recipe, setRecipe] = useState<Recipe | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [currentUserId, setCurrentUserId] = useState<string | null>(null)
-  const [currentUserRole, setCurrentUserRole] = useState<string>('user')
-  const [isFavorite, setIsFavorite] = useState(false)
+
   const [userRating, setUserRating] = useState<number | null>(null)
-  const [averageRating, setAverageRating] = useState<number | null>(null)
-  const [ratingCount, setRatingCount] = useState(0)
-  const [comments, setComments] = useState<Comment[]>([])
+  const [averageRating, setAverageRating] = useState(initialRating.average)
+  const [ratingCount, setRatingCount] = useState(initialRating.count)
+  const [comments, setComments] = useState<Comment[]>(initialComments)
   const [commentText, setCommentText] = useState('')
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null)
   const [editingCommentText, setEditingCommentText] = useState('')
@@ -78,152 +86,48 @@ export default function RecipeDetailPage({ params }: PageProps) {
   const [showCollectionsModal, setShowCollectionsModal] = useState(false)
   const [savedCollections, setSavedCollections] = useState<string[]>([])
 
+  // ✅ Load user-specific data on mount - FIXED: Using useEffect instead of useState
   useEffect(() => {
-    console.log('Recipe ID:', recipeId)
-    loadRecipe()
-    checkFavorite()
-    loadRating()
-    loadComments()
-    incrementViews()
-    loadUserCollections()
-  }, [recipeId])
-
-  const loadRecipe = async () => {
-    try {
-      console.log('Loading recipe...')
-      const { data: { user } } = await supabase.auth.getUser()
-      setCurrentUserId(user?.id || null)
-
-      if (user) {
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('role')
-          .eq('id', user.id)
-          .single()
-        setCurrentUserRole(profile?.role || 'user')
-      }
-
-      // ✅ FIX: Gunakan kolom user_id langsung tanpa foreign key name
-      const { data, error } = await supabase
-        .from('recipes')
-        .select(`
-          *,
-          profiles:user_id(username, avatar_url, role, is_premium),
-          categories(name),
-          recipe_tags(tags(id, name))
-        `)
-        .eq('id', recipeId)
-        .single()
-
-      console.log('Recipe data:', data)
-      console.log('Recipe error:', error)
-
-      if (error) throw error
-      setRecipe(data as Recipe)
-    } catch (err) {
-      console.error('Error loading recipe:', err)
-      toast.error('Gagal memuat resep')
-    } finally {
-      setLoading(false)
+    if (currentUser) {
+      loadUserRating()
+      loadUserCollections()
     }
-  }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUser])
 
-  const incrementViews = async () => {
+  const loadUserRating = async () => {
+    if (!currentUser) return
+
     try {
-      const { data: current } = await supabase
-        .from('recipes')
-        .select('views_count')
-        .eq('id', recipeId)
-        .single()
-
-      if (current) {
-        await supabase
-          .from('recipes')
-          .update({ views_count: (current.views_count || 0) + 1 })
-          .eq('id', recipeId)
-      }
-    } catch (err) {
-      console.error('Error incrementing views:', err)
-    }
-  }
-
-  const checkFavorite = async () => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return
-
       const { data } = await supabase
-        .from('board_recipes')
-        .select('id, recipe_boards!inner(user_id)')
-        .eq('recipe_id', recipeId)
-        .eq('recipe_boards.user_id', user.id)
+        .from('recipe_ratings')
+        .select('rating')
+        .eq('recipe_id', recipe.id)
+        .eq('user_id', currentUser.id)
         .maybeSingle()
 
-      setIsFavorite(!!data)
+      setUserRating(data?.rating || null)
     } catch (err) {
-      console.error('Error checking favorite:', err)
-    }
-  }
-
-  const loadRating = async () => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser()
-
-      const { data: ratings } = await supabase
-        .from('recipe_ratings')
-        .select('rating, user_id')
-        .eq('recipe_id', recipeId)
-
-      if (ratings && ratings.length > 0) {
-        const total = ratings.reduce((sum, r) => sum + (r.rating || 0), 0)
-        setAverageRating(total / ratings.length)
-        setRatingCount(ratings.length)
-
-        if (user) {
-          const userRatingData = ratings.find(r => r.user_id === user.id)
-          setUserRating(userRatingData?.rating || null)
-        }
-      }
-    } catch (err) {
-      console.error('Error loading rating:', err)
-    }
-  }
-
-  const loadComments = async () => {
-    try {
-      // ✅ FIX: Gunakan kolom user_id langsung
-      const { data } = await supabase
-        .from('comments')
-        .select('*, profiles:user_id(username, avatar_url)')
-        .eq('recipe_id', recipeId)
-        .order('created_at', { ascending: false })
-
-      console.log('Comments loaded:', data)
-      setComments(data || [])
-    } catch (err) {
-      console.error('Error loading comments:', err)
+      console.error('Error loading user rating:', err)
     }
   }
 
   const loadUserCollections = async () => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return
+    if (!currentUser) return
 
-      // Load user's collections
+    try {
       const { data: collections } = await supabase
         .from('recipe_boards')
         .select('id, name')
-        .eq('user_id', user.id)
+        .eq('user_id', currentUser.id)
         .order('name')
 
       setUserCollections(collections || [])
 
-      // Check which collections already have this recipe
       const { data: existing } = await supabase
         .from('board_recipes')
         .select('board_id')
-        .eq('recipe_id', recipeId)
+        .eq('recipe_id', recipe.id)
 
       if (existing) {
         setSavedCollections(existing.map(item => item.board_id))
@@ -234,32 +138,30 @@ export default function RecipeDetailPage({ params }: PageProps) {
   }
 
   const handleToggleCollection = async (collectionId: string) => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) {
-        toast.error('Silakan login untuk menyimpan resep')
-        return
-      }
+    if (!currentUser) {
+      toast.error('Silakan login untuk menyimpan resep')
+      router.push('/login')
+      return
+    }
 
+    try {
       const isAlreadySaved = savedCollections.includes(collectionId)
 
       if (isAlreadySaved) {
-        // Remove from collection
         await supabase
           .from('board_recipes')
           .delete()
           .eq('board_id', collectionId)
-          .eq('recipe_id', recipeId)
+          .eq('recipe_id', recipe.id)
 
         setSavedCollections(prev => prev.filter(id => id !== collectionId))
         toast.success('Resep dihapus dari koleksi')
       } else {
-        // Add to collection
         await supabase
           .from('board_recipes')
           .insert({
             board_id: collectionId,
-            recipe_id: recipeId
+            recipe_id: recipe.id
           })
 
         setSavedCollections(prev => [...prev, collectionId])
@@ -272,17 +174,20 @@ export default function RecipeDetailPage({ params }: PageProps) {
   }
 
   const handleCreateNewCollection = async () => {
+    if (!currentUser) {
+      toast.error('Silakan login')
+      router.push('/login')
+      return
+    }
+
     const name = prompt('Nama koleksi baru:')
     if (!name?.trim()) return
 
     try {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return
-
       const { data: newCollection } = await supabase
         .from('recipe_boards')
         .insert({
-          user_id: user.id,
+          user_id: currentUser.id,
           name: name.trim()
         })
         .select('id, name')
@@ -299,18 +204,18 @@ export default function RecipeDetailPage({ params }: PageProps) {
   }
 
   const handleRating = async (rating: number) => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) {
-        toast.error('Silakan login untuk memberi rating')
-        return
-      }
+    if (!currentUser) {
+      toast.error('Silakan login untuk memberi rating')
+      router.push('/login')
+      return
+    }
 
+    try {
       const { data: existing } = await supabase
         .from('recipe_ratings')
         .select('id')
-        .eq('user_id', user.id)
-        .eq('recipe_id', recipeId)
+        .eq('user_id', currentUser.id)
+        .eq('recipe_id', recipe.id)
         .maybeSingle()
 
       if (existing) {
@@ -321,11 +226,23 @@ export default function RecipeDetailPage({ params }: PageProps) {
       } else {
         await supabase
           .from('recipe_ratings')
-          .insert({ recipe_id: recipeId, user_id: user.id, rating })
+          .insert({ recipe_id: recipe.id, user_id: currentUser.id, rating })
       }
 
       setUserRating(rating)
-      await loadRating()
+      
+      // Reload rating data
+      const { data: ratings } = await supabase
+        .from('recipe_ratings')
+        .select('rating')
+        .eq('recipe_id', recipe.id)
+
+      if (ratings && ratings.length > 0) {
+        const total = ratings.reduce((sum, r) => sum + (r.rating || 0), 0)
+        setAverageRating(total / ratings.length)
+        setRatingCount(ratings.length)
+      }
+
       toast.success('Rating berhasil dikirim!')
     } catch (err) {
       console.error('Error submitting rating:', err)
@@ -336,23 +253,28 @@ export default function RecipeDetailPage({ params }: PageProps) {
   const handleComment = async () => {
     if (!commentText.trim()) return
 
-    try {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) {
-        toast.error('Silakan login untuk berkomentar')
-        return
-      }
+    if (!currentUser) {
+      toast.error('Silakan login untuk berkomentar')
+      router.push('/login')
+      return
+    }
 
-      await supabase
+    try {
+      const { data: newComment } = await supabase
         .from('comments')
         .insert({
-          recipe_id: recipeId,
-          user_id: user.id,
+          recipe_id: recipe.id,
+          user_id: currentUser.id,
           content: commentText.trim()
         })
+        .select('*, profiles:user_id(username, avatar_url)')
+        .single()
+
+      if (newComment) {
+        setComments(prev => [newComment, ...prev])
+      }
 
       setCommentText('')
-      await loadComments()
       toast.success('Komentar berhasil dikirim!')
     } catch (err) {
       console.error('Error posting comment:', err)
@@ -369,9 +291,14 @@ export default function RecipeDetailPage({ params }: PageProps) {
         .update({ content: editingCommentText.trim() })
         .eq('id', commentId)
 
+      setComments(prev =>
+        prev.map(c =>
+          c.id === commentId ? { ...c, content: editingCommentText.trim() } : c
+        )
+      )
+
       setEditingCommentId(null)
       setEditingCommentText('')
-      await loadComments()
       toast.success('Komentar berhasil diperbarui!')
     } catch (err) {
       console.error('Error updating comment:', err)
@@ -384,7 +311,7 @@ export default function RecipeDetailPage({ params }: PageProps) {
 
     try {
       await supabase.from('comments').delete().eq('id', commentId)
-      await loadComments()
+      setComments(prev => prev.filter(c => c.id !== commentId))
       toast.success('Komentar berhasil dihapus!')
     } catch (err) {
       console.error('Error deleting comment:', err)
@@ -406,7 +333,7 @@ export default function RecipeDetailPage({ params }: PageProps) {
     if (!confirm('Apakah Anda yakin ingin menghapus resep ini?')) return
 
     try {
-      await supabase.from('recipes').delete().eq('id', recipeId)
+      await supabase.from('recipes').delete().eq('id', recipe.id)
       toast.success('Resep berhasil dihapus!')
       router.push('/home')
     } catch (err) {
@@ -416,31 +343,26 @@ export default function RecipeDetailPage({ params }: PageProps) {
   }
 
   const handleShare = async () => {
-    const url = `${window.location.origin}/recipe/${recipeId}`
+    const url = `${window.location.origin}/recipe/${recipe.id}`
     
-    // Check if Web Share API is available
     if (navigator.share) {
       try {
         await navigator.share({
-          title: recipe?.title || 'Resep Savora',
-          text: recipe?.description || 'Lihat resep ini di Savora!',
+          title: recipe.title,
+          text: recipe.description || 'Lihat resep ini di Savora!',
           url
         })
         return
       } catch (err) {
-        // User cancelled or error occurred, fall through to clipboard
         console.log('Share cancelled or failed:', err)
       }
     }
     
-    // Fallback: Copy to clipboard
     try {
-      // Check if clipboard API is available
       if (navigator.clipboard && navigator.clipboard.writeText) {
         await navigator.clipboard.writeText(url)
         toast.success('Link berhasil disalin!')
       } else {
-        // Ultimate fallback: create temporary input
         const tempInput = document.createElement('input')
         tempInput.value = url
         tempInput.style.position = 'fixed'
@@ -453,36 +375,12 @@ export default function RecipeDetailPage({ params }: PageProps) {
       }
     } catch (err) {
       console.error('Error copying to clipboard:', err)
-      toast.error('Gagal menyalin link. Silakan copy manual: ' + url)
+      toast.error('Gagal menyalin link')
     }
   }
 
-  const isOwner = currentUserId === recipe?.user_id
-  const canEdit = isOwner || currentUserRole === 'admin'
-
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#E76F51]" />
-      </div>
-    )
-  }
-
-  if (!recipe) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">Resep tidak ditemukan</h2>
-          <button
-            onClick={() => router.push('/home')}
-            className="text-[#E76F51] hover:underline"
-          >
-            Kembali ke beranda
-          </button>
-        </div>
-      </div>
-    )
-  }
+  const isOwner = currentUser?.id === recipe.user_id
+  const canEdit = isOwner || currentUser?.role === 'admin'
 
   return (
     <div className="min-h-screen bg-[#F5F7FA] pb-20">
@@ -655,7 +553,7 @@ export default function RecipeDetailPage({ params }: PageProps) {
           {canEdit && (
             <div className="flex gap-3 mb-6">
               <button
-                onClick={() => router.push(`/recipe/${recipeId}/edit`)}
+                onClick={() => router.push(`/recipe/${recipe.id}/edit`)}
                 className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 transition"
               >
                 <Edit className="w-5 h-5" />
@@ -771,11 +669,11 @@ export default function RecipeDetailPage({ params }: PageProps) {
           {/* Comments List */}
           <div className="space-y-4">
             {comments.length === 0 ? (
-              <p className="text-gray-500 text-center py-8">Belum ada komentar. Jadilah yang pertama!</p>
+              <p className="text-gray-500 text-center py-8">Belum ada komentar</p>
             ) : (
               comments.map(comment => {
-                const canEdit = currentUserId === comment.user_id
-                const canDelete = canEdit || currentUserRole === 'admin'
+                const canEditComment = currentUser?.id === comment.user_id
+                const canDeleteComment = canEditComment || currentUser?.role === 'admin'
                 const isEditing = editingCommentId === comment.id
 
                 return (
@@ -806,22 +704,20 @@ export default function RecipeDetailPage({ params }: PageProps) {
                               {new Date(comment.created_at).toLocaleDateString('id-ID')}
                             </p>
                           </div>
-                          {(canEdit || canDelete) && !isEditing && (
+                          {(canEditComment || canDeleteComment) && !isEditing && (
                             <div className="flex gap-1">
-                              {canEdit && (
+                              {canEditComment && (
                                 <button
                                   onClick={() => startEditComment(comment)}
                                   className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition"
-                                  title="Edit"
                                 >
                                   <Edit className="w-4 h-4" />
                                 </button>
                               )}
-                              {canDelete && (
+                              {canDeleteComment && (
                                 <button
                                   onClick={() => handleDeleteComment(comment.id)}
                                   className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition"
-                                  title="Hapus"
                                 >
                                   <Trash2 className="w-4 h-4" />
                                 </button>
@@ -878,7 +774,6 @@ export default function RecipeDetailPage({ params }: PageProps) {
             className="bg-white rounded-3xl shadow-2xl max-w-md w-full max-h-[80vh] overflow-hidden"
             onClick={e => e.stopPropagation()}
           >
-            {/* Header */}
             <div className="bg-gradient-to-r from-[#E76F51] to-[#F4A261] text-white p-6">
               <div className="flex items-center justify-between mb-2">
                 <h3 className="text-2xl font-bold">Simpan ke Koleksi</h3>
@@ -892,7 +787,6 @@ export default function RecipeDetailPage({ params }: PageProps) {
               <p className="text-white/90 text-sm">Pilih koleksi untuk menyimpan resep ini</p>
             </div>
 
-            {/* Collections List */}
             <div className="p-6 overflow-y-auto max-h-96">
               {userCollections.length === 0 ? (
                 <div className="text-center py-8">
@@ -938,7 +832,6 @@ export default function RecipeDetailPage({ params }: PageProps) {
                 </div>
               )}
 
-              {/* Create New Collection Button */}
               {userCollections.length > 0 && (
                 <button
                   onClick={handleCreateNewCollection}

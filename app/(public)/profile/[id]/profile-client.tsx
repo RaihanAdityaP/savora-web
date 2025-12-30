@@ -1,21 +1,16 @@
 'use client'
 
-import { use, useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import Image from 'next/image'
 import { toast } from 'sonner'
 import {
-  Camera, Edit, Save, User, MapPin, Calendar, Mail,
-  Settings, Shield, Crown, Users, BookMarked, ChefHat,
-  UserPlus, UserMinus, Loader2, ArrowLeft, Verified
+  Camera, Edit, Save, User, Settings, Shield, Crown, Users,
+  ChefHat, UserPlus, UserMinus, Loader2, ArrowLeft, Verified
 } from 'lucide-react'
 import UnifiedNavigation from '@/components/ui/unified-navigation'
 import RecipeCard from '@/components/ui/recipe-card'
-
-interface PageProps {
-  params: Promise<{ id: string }>
-}
 
 interface Profile {
   id: string
@@ -65,93 +60,61 @@ interface Follow {
   }
 }
 
-export default function ProfilePage({ params }: PageProps) {
-  const { id: profileId } = use(params)
+interface ProfileClientProps {
+  profile: Profile
+  recipes: Recipe[]
+  initialRatings: Record<string, number>
+  currentUser: {
+    id: string
+    role: string
+    avatarUrl: string | null
+  } | null
+  initialIsFollowing: boolean
+}
+
+export default function ProfileClient({
+  profile: initialProfile,
+  recipes: initialRecipes,
+  initialRatings,
+  currentUser,
+  initialIsFollowing
+}: ProfileClientProps) {
   const router = useRouter()
   const supabase = createClient()
 
-  const [profile, setProfile] = useState<Profile | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [currentUserId, setCurrentUserId] = useState<string | null>(null)
-  const [currentUserRole, setCurrentUserRole] = useState<string>('user')
-  const [isOwnProfile, setIsOwnProfile] = useState(false)
+  const [profile, setProfile] = useState<Profile>(initialProfile)
+  const [isOwnProfile] = useState(currentUser?.id === initialProfile.id)
   const [isEditing, setIsEditing] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false)
 
-  // Follow state
-  const [isFollowing, setIsFollowing] = useState(false)
+  const [isFollowing, setIsFollowing] = useState(initialIsFollowing)
   const [isFollowLoading, setIsFollowLoading] = useState(false)
 
-  // Edit form
-  const [editUsername, setEditUsername] = useState('')
-  const [editFullName, setEditFullName] = useState('')
-  const [editBio, setEditBio] = useState('')
+  const [editUsername, setEditUsername] = useState(initialProfile.username || '')
+  const [editFullName, setEditFullName] = useState(initialProfile.full_name || '')
+  const [editBio, setEditBio] = useState(initialProfile.bio || '')
 
-  // Recipes
-  const [recipes, setRecipes] = useState<Recipe[]>([])
-  const [recipeRatings, setRecipeRatings] = useState<Record<string, number>>({})
+  const [recipes, setRecipes] = useState<Recipe[]>(initialRecipes)
+  const [recipeRatings, setRecipeRatings] = useState<Record<string, number>>(initialRatings)
 
-  // Followers/Following modal
   const [showFollowersModal, setShowFollowersModal] = useState(false)
   const [showFollowingModal, setShowFollowingModal] = useState(false)
   const [followers, setFollowers] = useState<Follow[]>([])
   const [following, setFollowing] = useState<Follow[]>([])
-
-  useEffect(() => {
-    loadCurrentUser()
-    loadProfile()
-    loadRecipes()
-  }, [profileId])
-
-  const loadCurrentUser = async () => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) {
-        router.push('/login')
-        return
-      }
-
-      setCurrentUserId(user.id)
-      setIsOwnProfile(user.id === profileId)
-
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('role')
-        .eq('id', user.id)
-        .single()
-
-      if (profile) {
-        setCurrentUserRole(profile.role)
-      }
-    } catch (err) {
-      console.error('Error loading current user:', err)
-    }
-  }
 
   const loadProfile = async () => {
     try {
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
-        .eq('id', profileId)
+        .eq('id', profile.id)
         .single()
 
       if (error) throw error
-
       setProfile(data)
-      setEditUsername(data.username || '')
-      setEditFullName(data.full_name || '')
-      setEditBio(data.bio || '')
-
-      if (currentUserId && currentUserId !== profileId) {
-        await checkIfFollowing()
-      }
     } catch (err) {
       console.error('Error loading profile:', err)
-      toast.error('Gagal memuat profil')
-    } finally {
-      setLoading(false)
     }
   }
 
@@ -161,17 +124,16 @@ export default function ProfilePage({ params }: PageProps) {
         .from('recipes')
         .select(`
           *,
-          profiles!recipes_user_id_fkey(username, avatar_url, role),
+          profiles:user_id(username, avatar_url, role),
           categories(id, name)
         `)
-        .eq('user_id', profileId)
+        .eq('user_id', profile.id)
         .eq('status', 'approved')
         .order('created_at', { ascending: false })
 
       if (data) {
         setRecipes(data as Recipe[])
 
-        // Load ratings
         for (const recipe of data) {
           const { data: ratings } = await supabase
             .from('recipe_ratings')
@@ -192,25 +154,8 @@ export default function ProfilePage({ params }: PageProps) {
     }
   }
 
-  const checkIfFollowing = async () => {
-    if (!currentUserId) return
-
-    try {
-      const { data } = await supabase
-        .from('follows')
-        .select('id')
-        .eq('follower_id', currentUserId)
-        .eq('following_id', profileId)
-        .maybeSingle()
-
-      setIsFollowing(!!data)
-    } catch (err) {
-      console.error('Error checking follow status:', err)
-    }
-  }
-
   const handleToggleFollow = async () => {
-    if (!currentUserId || isOwnProfile) return
+    if (!currentUser || isOwnProfile) return
 
     setIsFollowLoading(true)
     try {
@@ -218,16 +163,16 @@ export default function ProfilePage({ params }: PageProps) {
         await supabase
           .from('follows')
           .delete()
-          .eq('follower_id', currentUserId)
-          .eq('following_id', profileId)
+          .eq('follower_id', currentUser.id)
+          .eq('following_id', profile.id)
 
         toast.success('Berhenti mengikuti')
       } else {
         await supabase
           .from('follows')
           .insert({
-            follower_id: currentUserId,
-            following_id: profileId
+            follower_id: currentUser.id,
+            following_id: profile.id
           })
 
         toast.success('Berhasil mengikuti!')
@@ -245,7 +190,7 @@ export default function ProfilePage({ params }: PageProps) {
 
   const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
-    if (!file) return
+    if (!file || !currentUser) return
 
     if (file.size > 5 * 1024 * 1024) {
       toast.error('Ukuran gambar maksimal 5MB')
@@ -255,7 +200,7 @@ export default function ProfilePage({ params }: PageProps) {
     setIsUploadingAvatar(true)
     try {
       const fileExt = file.name.split('.').pop()
-      const fileName = `${currentUserId}-${Date.now()}.${fileExt}`
+      const fileName = `${currentUser.id}-${Date.now()}.${fileExt}`
       const filePath = `avatars/${fileName}`
 
       const { error: uploadError } = await supabase.storage
@@ -271,7 +216,7 @@ export default function ProfilePage({ params }: PageProps) {
       await supabase
         .from('profiles')
         .update({ avatar_url: publicUrl })
-        .eq('id', currentUserId!)
+        .eq('id', currentUser.id)
 
       toast.success('Foto profil berhasil diperbarui!')
       await loadProfile()
@@ -284,7 +229,7 @@ export default function ProfilePage({ params }: PageProps) {
   }
 
   const handleSaveProfile = async () => {
-    if (!editUsername.trim()) {
+    if (!editUsername.trim() || !currentUser) {
       toast.error('Username tidak boleh kosong')
       return
     }
@@ -299,7 +244,7 @@ export default function ProfilePage({ params }: PageProps) {
           bio: editBio.trim() || null,
           updated_at: new Date().toISOString()
         })
-        .eq('id', currentUserId!)
+        .eq('id', currentUser.id)
 
       toast.success('Profil berhasil diperbarui!')
       setIsEditing(false)
@@ -317,7 +262,7 @@ export default function ProfilePage({ params }: PageProps) {
       const { data } = await supabase
         .from('follows')
         .select('follower_id, profiles!follows_follower_id_fkey(id, username, avatar_url, full_name, is_banned, banned_reason)')
-        .eq('following_id', profileId)
+        .eq('following_id', profile.id)
 
       setFollowers((data || []) as Follow[])
       setShowFollowersModal(true)
@@ -332,7 +277,7 @@ export default function ProfilePage({ params }: PageProps) {
       const { data } = await supabase
         .from('follows')
         .select('following_id, profiles!follows_following_id_fkey(id, username, avatar_url, full_name, is_banned, banned_reason)')
-        .eq('follower_id', profileId)
+        .eq('follower_id', profile.id)
 
       setFollowing((data || []) as Follow[])
       setShowFollowingModal(true)
@@ -364,49 +309,11 @@ export default function ProfilePage({ params }: PageProps) {
     }
   }
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-[#F5F7FA]">
-        <UnifiedNavigation avatarUrl={profile?.avatar_url} />
-        <div className="flex items-center justify-center min-h-[60vh] pt-16">
-          <div className="text-center space-y-4">
-            <div className="w-20 h-20 mx-auto rounded-full bg-gradient-to-br from-[#E76F51] to-[#F4A261] flex items-center justify-center shadow-xl animate-pulse">
-              <Loader2 className="w-10 h-10 text-white animate-spin" />
-            </div>
-            <p className="text-gray-600 font-medium">Memuat profil...</p>
-          </div>
-        </div>
-      </div>
-    )
-  }
-
-  if (!profile) {
-    return (
-      <div className="min-h-screen bg-[#F5F7FA]">
-        <UnifiedNavigation />
-        <div className="flex items-center justify-center min-h-[60vh] pt-16">
-          <div className="text-center">
-            <User className="w-20 h-20 mx-auto mb-4 text-gray-300" />
-            <h2 className="text-2xl font-bold text-gray-900 mb-2">Profil tidak ditemukan</h2>
-            <button
-              onClick={() => router.back()}
-              className="text-[#E76F51] hover:underline"
-            >
-              Kembali
-            </button>
-          </div>
-        </div>
-      </div>
-    )
-  }
-
   return (
     <div className="min-h-screen bg-[#F5F7FA] pb-24 md:pb-8">
-      <UnifiedNavigation avatarUrl={profile.avatar_url} />
+      <UnifiedNavigation avatarUrl={currentUser?.avatarUrl || null} />
 
-      {/* Header */}
       <div className={`bg-gradient-to-br ${getRoleGradient(profile.role)} relative overflow-hidden mt-16`}>
-        {/* Background Pattern */}
         <div className="absolute inset-0 opacity-10">
           <div className="absolute inset-0" style={{
             backgroundImage: `radial-gradient(circle, white 1px, transparent 1px)`,
@@ -415,7 +322,6 @@ export default function ProfilePage({ params }: PageProps) {
         </div>
 
         <div className="relative max-w-7xl mx-auto px-4 py-8">
-          {/* Back Button */}
           {!isOwnProfile && (
             <button
               onClick={() => router.back()}
@@ -426,7 +332,6 @@ export default function ProfilePage({ params }: PageProps) {
           )}
 
           <div className="flex flex-col md:flex-row items-center md:items-start gap-6">
-            {/* Avatar */}
             <div className="relative">
               <div className={`w-32 h-32 rounded-full bg-gradient-to-br ${getRoleGradient(profile.role)} p-1 shadow-2xl`}>
                 {profile.avatar_url ? (
@@ -444,7 +349,6 @@ export default function ProfilePage({ params }: PageProps) {
                 )}
               </div>
 
-              {/* Upload Button */}
               {isOwnProfile && (
                 <label className="absolute bottom-0 right-0 w-10 h-10 rounded-full bg-white shadow-lg flex items-center justify-center cursor-pointer hover:bg-gray-50 transition">
                   <input
@@ -462,7 +366,6 @@ export default function ProfilePage({ params }: PageProps) {
                 </label>
               )}
 
-              {/* Role Badge */}
               {profile.role === 'admin' && (
                 <div className="absolute top-0 right-0 w-8 h-8 rounded-full bg-gradient-to-br from-yellow-400 to-orange-500 flex items-center justify-center shadow-lg border-2 border-white">
                   <Verified className="w-5 h-5 text-white" />
@@ -470,7 +373,6 @@ export default function ProfilePage({ params }: PageProps) {
               )}
             </div>
 
-            {/* Info */}
             <div className="flex-1 text-center md:text-left">
               <h1 className="text-3xl md:text-4xl font-bold text-white mb-2">
                 {profile.username || 'Unknown'}
@@ -479,7 +381,6 @@ export default function ProfilePage({ params }: PageProps) {
                 <p className="text-white/90 text-lg mb-3">{profile.full_name}</p>
               )}
 
-              {/* Role Badge */}
               <div className="inline-flex items-center gap-2 px-4 py-2 bg-white/20 backdrop-blur-sm rounded-full border-2 border-white/40 mb-4">
                 {profile.role === 'admin' ? (
                   <Shield className="w-4 h-4 text-white" />
@@ -493,14 +394,12 @@ export default function ProfilePage({ params }: PageProps) {
                 </span>
               </div>
 
-              {/* Bio */}
               {profile.bio && (
                 <p className="text-white/90 text-base max-w-2xl mb-4 leading-relaxed">
                   {profile.bio}
                 </p>
               )}
 
-              {/* Stats */}
               <div className="flex gap-6 justify-center md:justify-start">
                 <div className="text-center">
                   <div className="text-2xl font-bold text-white">{profile.total_recipes}</div>
@@ -517,7 +416,6 @@ export default function ProfilePage({ params }: PageProps) {
               </div>
             </div>
 
-            {/* Action Buttons */}
             <div className="flex flex-col gap-3">
               {isOwnProfile ? (
                 <>
@@ -537,7 +435,7 @@ export default function ProfilePage({ params }: PageProps) {
                       </>
                     )}
                   </button>
-                  {currentUserRole === 'admin' && (
+                  {currentUser?.role === 'admin' && (
                     <button
                       onClick={() => router.push('/admin')}
                       className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-yellow-400 to-orange-500 text-white rounded-xl font-semibold hover:opacity-90 transition shadow-lg"
@@ -577,10 +475,8 @@ export default function ProfilePage({ params }: PageProps) {
         </div>
       </div>
 
-      {/* Main Content */}
       <div className="max-w-7xl mx-auto px-4 py-8">
         {isEditing && isOwnProfile ? (
-          // Edit Form
           <div className="bg-white rounded-3xl shadow-xl p-6 md:p-8 mb-6">
             <h2 className="text-2xl font-bold text-gray-900 mb-6">Edit Profil</h2>
             
@@ -642,7 +538,6 @@ export default function ProfilePage({ params }: PageProps) {
           </div>
         ) : null}
 
-        {/* Recipes Section */}
         <div className="mb-6">
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center gap-3">
@@ -669,7 +564,7 @@ export default function ProfilePage({ params }: PageProps) {
               </p>
             </div>
           ) : (
-            <div className="space-y-0">
+            <div className="space-y-4">
               {recipes.map((recipe) => (
                 <RecipeCard
                   key={recipe.id}
@@ -683,177 +578,112 @@ export default function ProfilePage({ params }: PageProps) {
         </div>
       </div>
 
-      {/* Followers Modal */}
       {showFollowersModal && (
-        <div
-          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
-          onClick={() => setShowFollowersModal(false)}
-        >
-          <div
-            className="bg-white rounded-3xl shadow-2xl max-w-md w-full max-h-[80vh] overflow-hidden"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="bg-gradient-to-r from-[#E76F51] to-[#F4A261] text-white p-6">
-              <div className="flex items-center justify-between">
-                <h3 className="text-2xl font-bold">Pengikut</h3>
-                <button
-                  onClick={() => setShowFollowersModal(false)}
-                  className="w-8 h-8 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center"
-                >
-                  <ArrowLeft className="w-5 h-5" />
-                </button>
-              </div>
-            </div>
-
-            <div className="p-6 overflow-y-auto max-h-96">
-              {followers.length === 0 ? (
-                <div className="text-center py-8">
-                  <Users className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-                  <p className="text-gray-600">Belum ada pengikut</p>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {followers.map((follow, idx) => {
-                    const user = follow.profiles
-                    const userId = follow.follower_id
-                    const isBanned = user.is_banned
-
-                    return (
-                      <div
-                        key={idx}
-                        className={`flex items-center gap-3 p-3 rounded-xl border-2 ${
-                          isBanned ? 'bg-red-50 border-red-200' : 'bg-white border-gray-200 hover:border-[#E76F51] cursor-pointer'
-                        } transition`}
-                        onClick={() => {
-                          if (!isBanned && userId !== currentUserId) {
-                            setShowFollowersModal(false)
-                            router.push(`/profile/${userId}`)
-                          }
-                        }}
-                      >
-                        <div className={`w-12 h-12 rounded-full ${isBanned ? 'bg-red-400' : 'bg-gradient-to-br from-[#E76F51] to-[#F4A261]'} p-0.5`}>
-                          {user.avatar_url && !isBanned ? (
-                            <Image
-                              src={user.avatar_url}
-                              alt={user.username || 'User'}
-                              width={48}
-                              height={48}
-                              className="w-full h-full rounded-full object-cover"
-                            />
-                          ) : (
-                            <div className="w-full h-full rounded-full bg-white flex items-center justify-center">
-                              <User className="w-6 h-6 text-gray-400" />
-                            </div>
-                          )}
-                        </div>
-                        <div className="flex-1">
-                          <p className={`font-semibold ${isBanned ? 'text-red-700' : 'text-gray-900'}`}>
-                            {user.username || 'Unknown'}
-                          </p>
-                          {user.full_name && (
-                            <p className="text-sm text-gray-600">{user.full_name}</p>
-                          )}
-                          {isBanned && (
-                            <p className="text-xs text-red-600 mt-1">
-                              Dibanned: {user.banned_reason || 'Tidak disebutkan'}
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
+        <FollowModal
+          title="Pengikut"
+          users={followers.map(f => ({ ...f.profiles, userId: f.follower_id }))}
+          onClose={() => setShowFollowersModal(false)}
+          currentUserId={currentUser?.id}
+          router={router}
+        />
       )}
 
-      {/* Following Modal */}
       {showFollowingModal && (
-        <div
-          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
-          onClick={() => setShowFollowingModal(false)}
-        >
-          <div
-            className="bg-white rounded-3xl shadow-2xl max-w-md w-full max-h-[80vh] overflow-hidden"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="bg-gradient-to-r from-[#E76F51] to-[#F4A261] text-white p-6">
-              <div className="flex items-center justify-between">
-                <h3 className="text-2xl font-bold">Mengikuti</h3>
-                <button
-                  onClick={() => setShowFollowingModal(false)}
-                  className="w-8 h-8 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center"
-                >
-                  <ArrowLeft className="w-5 h-5" />
-                </button>
-              </div>
-            </div>
+        <FollowModal
+          title="Mengikuti"
+          users={following.map(f => ({ ...f.profiles, userId: f.following_id }))}
+          onClose={() => setShowFollowingModal(false)}
+          currentUserId={currentUser?.id}
+          router={router}
+        />
+      )}
+    </div>
+  )
+}
 
-            <div className="p-6 overflow-y-auto max-h-96">
-              {following.length === 0 ? (
-                <div className="text-center py-8">
-                  <Users className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-                  <p className="text-gray-600">Belum mengikuti siapa pun</p>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {following.map((follow, idx) => {
-                    const user = follow.profiles
-                    const userId = follow.following_id
-                    const isBanned = user.is_banned
-
-                    return (
-                      <div
-                        key={idx}
-                        className={`flex items-center gap-3 p-3 rounded-xl border-2 ${
-                          isBanned ? 'bg-red-50 border-red-200' : 'bg-white border-gray-200 hover:border-[#E76F51] cursor-pointer'
-                        } transition`}
-                        onClick={() => {
-                          if (!isBanned && userId !== currentUserId) {
-                            setShowFollowingModal(false)
-                            router.push(`/profile/${userId}`)
-                          }
-                        }}
-                      >
-                        <div className={`w-12 h-12 rounded-full ${isBanned ? 'bg-red-400' : 'bg-gradient-to-br from-[#E76F51] to-[#F4A261]'} p-0.5`}>
-                          {user.avatar_url && !isBanned ? (
-                            <Image
-                              src={user.avatar_url}
-                              alt={user.username || 'User'}
-                              width={48}
-                              height={48}
-                              className="w-full h-full rounded-full object-cover"
-                            />
-                          ) : (
-                            <div className="w-full h-full rounded-full bg-white flex items-center justify-center">
-                              <User className="w-6 h-6 text-gray-400" />
-                            </div>
-                          )}
-                        </div>
-                        <div className="flex-1">
-                          <p className={`font-semibold ${isBanned ? 'text-red-700' : 'text-gray-900'}`}>
-                            {user.username || 'Unknown'}
-                          </p>
-                          {user.full_name && (
-                            <p className="text-sm text-gray-600">{user.full_name}</p>
-                          )}
-                          {isBanned && (
-                            <p className="text-xs text-red-600 mt-1">
-                              Dibanned: {user.banned_reason || 'Tidak disebutkan'}
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              )}
-            </div>
+function FollowModal({ title, users, onClose, currentUserId, router }: any) {
+  return (
+    <div
+      className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white rounded-3xl shadow-2xl max-w-md w-full max-h-[80vh] overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="bg-gradient-to-r from-[#E76F51] to-[#F4A261] text-white p-6">
+          <div className="flex items-center justify-between">
+            <h3 className="text-2xl font-bold">{title}</h3>
+            <button
+              onClick={onClose}
+              className="w-8 h-8 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center"
+            >
+              <ArrowLeft className="w-5 h-5" />
+            </button>
           </div>
         </div>
-      )}
+
+        <div className="p-6 overflow-y-auto max-h-96">
+          {users.length === 0 ? (
+            <div className="text-center py-8">
+              <Users className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+              <p className="text-gray-600">
+                {title === 'Pengikut' ? 'Belum ada pengikut' : 'Belum mengikuti siapa pun'}
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {users.map((user: any, idx: number) => {
+                const isBanned = user.is_banned
+
+                return (
+                  <div
+                    key={idx}
+                    className={`flex items-center gap-3 p-3 rounded-xl border-2 ${
+                      isBanned ? 'bg-red-50 border-red-200' : 'bg-white border-gray-200 hover:border-[#E76F51] cursor-pointer'
+                    } transition`}
+                    onClick={() => {
+                      if (!isBanned && user.userId !== currentUserId) {
+                        onClose()
+                        router.push(`/profile/${user.userId}`)
+                      }
+                    }}
+                  >
+                    <div className={`w-12 h-12 rounded-full ${isBanned ? 'bg-red-400' : 'bg-gradient-to-br from-[#E76F51] to-[#F4A261]'} p-0.5`}>
+                      {user.avatar_url && !isBanned ? (
+                        <Image
+                          src={user.avatar_url}
+                          alt={user.username || 'User'}
+                          width={48}
+                          height={48}
+                          className="w-full h-full rounded-full object-cover"
+                        />
+                      ) : (
+                        <div className="w-full h-full rounded-full bg-white flex items-center justify-center">
+                          <User className="w-6 h-6 text-gray-400" />
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex-1">
+                      <p className={`font-semibold ${isBanned ? 'text-red-700' : 'text-gray-900'}`}>
+                        {user.username || 'Unknown'}
+                      </p>
+                      {user.full_name && (
+                        <p className="text-sm text-gray-600">{user.full_name}</p>
+                      )}
+                      {isBanned && (
+                        <p className="text-xs text-red-600 mt-1">
+                          Dibanned: {user.banned_reason || 'Tidak disebutkan'}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   )
 }
