@@ -5,7 +5,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const baseUrl = 'https://savora-web.vercel.app'
   const supabase = await createClient()
 
-  // Static routes
+  // Static routes - SEMUA route public yang bisa diakses
   const staticRoutes: MetadataRoute.Sitemap = [
     {
       url: baseUrl,
@@ -45,7 +45,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     .select('id, updated_at')
     .eq('status', 'approved')
     .order('updated_at', { ascending: false })
-    .limit(1000) // Limit untuk performa
+    .limit(5000) // Increased limit untuk lebih banyak resep
 
   const recipeRoutes: MetadataRoute.Sitemap = (recipes || []).map((recipe) => ({
     url: `${baseUrl}/recipe/${recipe.id}`,
@@ -59,7 +59,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     .from('profiles')
     .select('id, updated_at')
     .gt('total_recipes', 0)
-    .limit(500)
+    .limit(1000)
 
   const profileRoutes: MetadataRoute.Sitemap = (profiles || []).map((profile) => ({
     url: `${baseUrl}/profile/${profile.id}`,
