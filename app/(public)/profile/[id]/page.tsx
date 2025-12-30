@@ -1,5 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
-import { notFound, redirect } from 'next/navigation'
+import { notFound } from 'next/navigation'
 import ProfileClient from './profile-client'
 
 interface PageProps {
@@ -10,14 +10,9 @@ export default async function ProfilePage({ params }: PageProps) {
   const { id: profileId } = await params
   const supabase = await createClient()
 
-  // Get current user
+  // Get current user (OPTIONAL - tidak redirect jika tidak ada)
   const { data: { user } } = await supabase.auth.getUser()
   
-  // If not logged in, redirect to login
-  if (!user) {
-    redirect('/login')
-  }
-
   let currentUser = null
   if (user) {
     const { data: profile } = await supabase
