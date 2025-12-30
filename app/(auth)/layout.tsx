@@ -46,7 +46,7 @@ export default function AuthLayout({
 
         {/* Footer */}
         <div className="p-6 text-center text-white/70 text-sm">
-          <p>&copy; 2024 Savora. All rights reserved.</p>
+          <p>&copy; 2026 Savora. All rights reserved.</p>
         </div>
       </div>
     </div>
