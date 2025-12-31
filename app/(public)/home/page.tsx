@@ -210,9 +210,10 @@ async function getInitialData(page: number = 1) {
 export default async function HomePage({
   searchParams,
 }: {
-  searchParams: { page?: string }
+  searchParams: Promise<{ page?: string }>
 }) {
-  const page = Number(searchParams.page) || 1
+  const params = await searchParams
+   const page = Number(params.page) || 1
   const data = await getInitialData(page)
 
   return <HomeClient initialData={data} />
