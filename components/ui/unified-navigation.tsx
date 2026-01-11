@@ -15,7 +15,8 @@ import {
   Bookmark,
   User,
   ChevronDown,
-  X
+  X,
+  Settings
 } from 'lucide-react'
 
 interface UnifiedNavigationProps {
@@ -141,6 +142,7 @@ const handleLogout = async () => {
     { label: 'Buat Resep', icon: Plus, path: '/create' },
     { label: 'Notifikasi', icon: Bell, path: '/notifications', badge: unreadCount },
     { label: 'Profile', icon: User, path: userId ? `/profile/${userId}` : null },
+    { label: 'Settings', icon: Settings, path: '/settings' },
     { label: 'Keluar', icon: LogOut, action: handleLogout, isDanger: true },
   ]
 
